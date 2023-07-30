@@ -15,6 +15,16 @@ import asyncio
 
 intents = discord.Intents.default()
 
+# TEST_GUILD = discord.Object(id=[Your Guild ID HERE])
+
+# If you want to use TEST_GUILD, be sure to add it to the end of the tree command decorators
+# Example:
+# @tree.command(name="play",
+#               description="Play a music with the provided link",
+#               guild=TEST_GUILD)
+
+# Using a TEST_GUILD makes it so that Discord refreshes the client with the slash commands faster
+
 intents.message_content = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
@@ -22,9 +32,21 @@ tree = app_commands.CommandTree(client)
 # Mapping from guild id to queue and other information
 q = {}  # Maps from int to Queue
 
+# My opus library is in homebrew as I'm in M1 Mac
+# You can comment this out in Windows, I think
 discord.opus.load_opus('/opt/homebrew/Cellar/opus/1.4/lib/libopus.0.dylib')
 if not discord.opus.is_loaded():
     raise RuntimeError('Opus failed to load')
+
+
+@client.event
+async def on_voice_state_update(member, before, after):
+    if before.channel is not None and after.channel is None and member.bot is True:
+        guild_id = member.guild.id
+        queue = q.get(guild_id, None)
+
+        if queue:
+            q[guild_id] = None
 
 
 @client.event
@@ -39,7 +61,7 @@ async def play_song(guild_id: int) -> None:
 
     queue = q.get(guild_id, None)
     if queue is None:
-        raise RuntimeError('Queue is None!')
+        return
 
     song = queue.songs.pop(0) if queue.songs else ''
     id = queue.ids.pop(0) if queue.ids else ''
@@ -49,7 +71,10 @@ async def play_song(guild_id: int) -> None:
 
     if song == '':
         await voice_client.disconnect()
-        del q[guild_id]
+        await queue.text_channel.send('Queue is now empty!')
+
+        if queue:
+            q[guild_id] = None
     else:
         queue.current = song
         await queue.text_channel.send(f'Now playing: "{song[:MAX_SONG_NAME_LENGTH]}..."')
@@ -58,11 +83,15 @@ async def play_song(guild_id: int) -> None:
         while voice_client.is_playing():
             await asyncio.sleep(1)
 
+            if voice_client.is_paused():
+                voice_client.stop()
+                return
+
         await play_song(guild_id)
+
 
 @tree.command(name="play",
               description="Play a music with the provided link")
-              # guild=TEST_GUILD)
 @app_commands.describe(link='The link you want to be played')
 async def play(interaction: discord.Interaction, link: str) -> None:
     """
@@ -118,7 +147,10 @@ async def play(interaction: discord.Interaction, link: str) -> None:
                 queue.ids.append(id)
 
                 try:
-                    voice_client = await voice_channel.connect()
+                    voice_client = await voice_channel.connect(timeout=5.0,
+                                                               reconnect=False,
+                                                               self_mute=True,
+                                                               self_deaf=True)
                     queue.voice_client = voice_client
                     await play_song(guild_id)
 
@@ -139,20 +171,39 @@ async def play(interaction: discord.Interaction, link: str) -> None:
 
 @tree.command(name="queue",
               description="Shows the current queue")
-              # guild=TEST_GUILD)
 async def queue(interaction: discord.Interaction) -> None:
     print('Printing current queue')
+    await interaction.response.send_message("Processing...")
 
     guild_id = interaction.guild_id
     queue = q.get(guild_id, None)
     if queue is None:
-        await interaction.response.send_message("There is no queue!")
+        await interaction.edit_original_response(content="There is no queue!")
     else:
-        await interaction.response.send_message(f"""
+        await interaction.edit_original_response(content=f"""
 Currently playing: {q[interaction.guild_id].current}
 Current queue:
 {q[interaction.guild_id].show()}
         """)
+
+
+@tree.command(name="skip",
+              description="Skips the current music playing")
+async def skip(interaction: discord.Interaction) -> None:
+    print('Skipping current song')
+    await interaction.response.send_message("Processing...")
+
+    guild_id = interaction.guild_id
+    queue = q.get(guild_id, None)
+
+    if queue is None:
+        await interaction.edit_original_response(content="There is no queue!")
+    else:
+        queue.voice_client.pause()
+
+        await play_song(guild_id)
+
+        await interaction.edit_original_response(content="Skipped")
 
 
 client.run(TOKEN)
