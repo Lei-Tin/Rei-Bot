@@ -2,6 +2,8 @@
 This is the file for a Queue object, which stores information about the Queue in a specific guild
 """
 from config import MAX_SONG_NAME_LENGTH
+from utils import truncate
+
 
 class Queue:
     """
@@ -11,14 +13,16 @@ class Queue:
     def __init__(self, voice_channel, text_channel) -> None:
         self.songs = []
         self.ids = []
+        self.urls = []
         self.current = ''
         self.voice_channel = voice_channel
         self.text_channel = text_channel
         self.voice_client = None
-        self.volume = 0.5
+        self.playing = True
 
     def show(self) -> str:
         """
         Show the current queue
         """
-        return '\n'.join([s[:MAX_SONG_NAME_LENGTH] for s in self.songs])
+        return '\n'.join(
+            [f'**{str(i + 1)}.** ' + truncate(s) for i, s in enumerate(self.songs)])
