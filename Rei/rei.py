@@ -87,7 +87,7 @@ def play_song(guild_id: int) -> None:
         return
 
     voice_client = queue.voice_client
-    if not voice_client.is_connected():
+    if not voice_client or not voice_client.is_connected():
         return
 
     if len(queue.songs) > 0:
@@ -187,40 +187,52 @@ async def play(interaction: discord.Interaction, link: str) -> None:
     if DOWNLOAD:
         ydl_opts = {
             'format': 'bestaudio/best',
-            'noplaylist': True,
             'outtmpl': os.path.join(*path, '%(id)s.%(ext)s'),
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
             }],
+            'download_archive': os.path.join(*path, 'archive.txt'),
         }
     else:
         ydl_opts = {
             'format': 'bestaudio/best',
-            'noplaylist': True,
         }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(link, download=False)
-            song = info_dict.get('title', None)
-            id = info_dict.get('id', None)
+
+            # Detection for playlist
+            if 'entries' in info_dict:
+                playlist = True
+            else:
+                playlist = False
+                song = info_dict.get('title', None)
+                id = info_dict.get('id', None)
 
             if DOWNLOAD:
-                if f"{id}.mp3" not in os.listdir(os.path.join(*path)):
-                    ydl.download([link])
+                ydl.download([link])
 
             queue = q.get(guild_id, None)
             if queue is None or not queue.playing:
                 queue = Queue(voice_channel, text_channel)
                 q[guild_id] = queue
 
-                queue.songs.append(song)
-                queue.ids.append(id)
+                if not playlist:
+                    queue.songs.append(song)
+                    queue.ids.append(id)
+                    if not DOWNLOAD:
+                        url = info_dict.get('url', None)
+                        queue.urls.append(url)
+                else:
+                    for entry in info_dict['entries']:
+                        queue.songs.append(entry['title'])
+                        queue.ids.append(entry['id'])
 
-                if not DOWNLOAD:
-                    url = info_dict.get('url', None)
-                    queue.urls.append(url)
+                        if not DOWNLOAD:
+                            url = entry.get('url', None)
+                            queue.urls.append(url)
                 try:
                     voice_client = await voice_channel.connect(timeout=2.5,
                                                                reconnect=True,
@@ -233,16 +245,31 @@ async def play(interaction: discord.Interaction, link: str) -> None:
                     await interaction.edit_original_response(content='Failed to play the music!')
                     return
             else:
-                queue.songs.append(song)
-                queue.ids.append(id)
-                if not DOWNLOAD:
-                    url = info_dict.get('url', None)
-                    queue.urls.append(url)
+                if not playlist:
+                    queue.songs.append(song)
+                    queue.ids.append(id)
+                    if not DOWNLOAD:
+                        url = info_dict.get('url', None)
+                        queue.urls.append(url)
+                else:
+                    for entry in info_dict['entries']:
+                        queue.songs.append(entry['title'])
+                        queue.ids.append(entry['id'])
 
-            print('Successfully Enqueued')
-            await interaction.edit_original_response(
-                content=f'Successfully enqueued "**{truncate(song)}**"!'
-            )
+                        if not DOWNLOAD:
+                            url = entry.get('url', None)
+                            queue.urls.append(url)
+
+            if playlist:
+                print('Successfully Enqueued a Playlist')
+                await interaction.edit_original_response(
+                    content=f'Successfully enqueued {len(info_dict["entries"])} songs!'
+                )
+            else:
+                print('Successfully Enqueued a Song')
+                await interaction.edit_original_response(
+                    content=f'Successfully enqueued "**{truncate(song)}**"!'
+                )
 
     except yt_dlp.utils.DownloadError:
         await interaction.edit_original_response(

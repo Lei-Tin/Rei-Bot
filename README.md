@@ -1,4 +1,4 @@
-# Rei-Bot v1.2
+# Rei-Bot v1.2.1
 
 A Discord Bot that is used to play music
 
@@ -9,6 +9,7 @@ Written in Python, not configured for public usage.
 - Play music from YouTube (Supports URL, but not playlist)
 - Have a queue of songs
 - Choose to download the songs or stream directly
+- Supports URL from YouTube playlists, enqueues all of them
 
 # Commands
 
