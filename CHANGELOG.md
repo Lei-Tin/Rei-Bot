@@ -2,18 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2] - 2023-07-31
+## [1.2.2] - 2023-08-04
 
 ### Added
 
-- Added /clear command to clear the whole queue
-- Added /remove command to remove a song from the queue with an index
-- Added the option to choose to stream the audio or download the audio (Download mode works more stable but will take up more space)
+- Now the bot puts a link to the song in the message sent when playing the song
+- Adds a check for the bot stay in the current voice channel until the queue finishes
+- Removed the ability to provide a search query link
 
 ### Fixed
 
-- Fixed a bug where the bot will fail to function when sending multiple commands together
-- Fixed a bug where the bot will fail to function when the queue is empty and adding more songs
+- Fixed a bug where the bot crashes if the video title contains emojis
+
+### Discovered bug
+
+- The bot will sometimes refuse to respond to any commands, diconnecting the bot then calling `/play` again will fix it. 
 
 ## [1.2.1] - 2023-08-01
 

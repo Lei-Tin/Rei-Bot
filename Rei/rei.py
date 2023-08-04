@@ -13,7 +13,15 @@ import discord
 from discord import app_commands
 
 import os
+import re
 import yt_dlp
+
+emoji_pattern = re.compile("["
+                           u"\U0001F600-\U0001F64F"  # emoticons
+                           u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+                           u"\U0001F680-\U0001F6FF"  # transport & map symbols
+                           u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+                           "]+", flags=re.UNICODE)
 
 intents = discord.Intents.default()
 
@@ -57,11 +65,16 @@ async def on_voice_state_update(member: discord.Member,
 
     if before.channel is not None and after.channel is None and member.bot is True:
         queue = q.get(guild_id, None)
+        if queue is None:
+            return
 
         queue.playing = False
+
+        # Resetting queue
         queue.songs = []
         queue.ids = []
         queue.urls = []
+        queue.youtube_urls = []
         queue.current = ''
 
 
@@ -107,8 +120,10 @@ def play_song(guild_id: int) -> None:
             voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS),
                               after=lambda e: play_song(guild_id))
 
+        original_link = queue.youtube_urls.pop(0) if queue.youtube_urls else ''
+
         asyncio.run_coroutine_threadsafe(
-            queue.text_channel.send(f'Now playing: "{truncate(song)}"!'),
+            queue.text_channel.send(f'Now playing: "[{truncate(emoji_pattern.sub(r"", song))}]({original_link})"!'),
             client.loop)
     else:
         asyncio.run_coroutine_threadsafe(voice_client.disconnect(), client.loop)
@@ -149,7 +164,9 @@ async def play_music(guild_id: int):
             voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS),
                               after=lambda e: play_song(guild_id))
 
-        await queue.text_channel.send(f'Now playing: "{truncate(song)}"!')
+        original_link = queue.youtube_urls.pop(0) if queue.youtube_urls else ''
+
+        await queue.text_channel.send(f'Now playing: "[{truncate(emoji_pattern.sub(r"", song))}]({original_link})"!')
     else:
         queue.playing = False
 
@@ -180,11 +197,21 @@ async def play(interaction: discord.Interaction, link: str) -> None:
     # interaction.guild_id gives the id of this message's guild
     guild_id = interaction.guild_id
 
-    path = ['Guilds', str(guild_id)]
-
-    os.makedirs(os.path.join(*path), exist_ok=True)
+    queue = q.get(guild_id, None)
+    if queue is None:
+        queue = Queue(voice_channel, text_channel)
+        q[guild_id] = queue
+    else:
+        if queue.voice_channel != voice_channel:
+            await interaction.edit_original_response(
+                content='Please wait until the current queue in the other channel is finished!'
+            )
+            return
 
     if DOWNLOAD:
+        path = ['Guilds', str(guild_id)]
+        os.makedirs(os.path.join(*path), exist_ok=True)
+
         ydl_opts = {
             'format': 'bestaudio/best',
             'outtmpl': os.path.join(*path, '%(id)s.%(ext)s'),
@@ -201,6 +228,10 @@ async def play(interaction: discord.Interaction, link: str) -> None:
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # Disable search queries
+            if 'search_query' in link:
+                raise yt_dlp.utils.DownloadError('Search queries are not allowed!')
+
             info_dict = ydl.extract_info(link, download=False)
 
             # Detection for playlist
@@ -210,18 +241,18 @@ async def play(interaction: discord.Interaction, link: str) -> None:
                 playlist = False
                 song = info_dict.get('title', None)
                 id = info_dict.get('id', None)
+                original_url = info_dict.get('original_url', None)
 
             if DOWNLOAD:
                 ydl.download([link])
 
             queue = q.get(guild_id, None)
-            if queue is None or not queue.playing:
-                queue = Queue(voice_channel, text_channel)
-                q[guild_id] = queue
+            if not queue.playing:
 
                 if not playlist:
                     queue.songs.append(song)
                     queue.ids.append(id)
+                    queue.youtube_urls.append(original_url)
                     if not DOWNLOAD:
                         url = info_dict.get('url', None)
                         queue.urls.append(url)
@@ -229,25 +260,30 @@ async def play(interaction: discord.Interaction, link: str) -> None:
                     for entry in info_dict['entries']:
                         queue.songs.append(entry['title'])
                         queue.ids.append(entry['id'])
+                        queue.youtube_urls.append(entry['original_url'])
 
                         if not DOWNLOAD:
                             url = entry.get('url', None)
                             queue.urls.append(url)
+
                 try:
-                    voice_client = await voice_channel.connect(timeout=2.5,
-                                                               reconnect=True,
-                                                               self_mute=True,
-                                                               self_deaf=True)
-                    queue.voice_client = voice_client
+                    if queue.voice_client is None:
+                        voice_client = await voice_channel.connect(timeout=2.5,
+                                                                   reconnect=True,
+                                                                   self_mute=True,
+                                                                   self_deaf=True)
+                        queue.voice_client = voice_client
                     await play_music(guild_id)
 
-                except RuntimeError as e:
+                except discord.ClientException as e:
                     await interaction.edit_original_response(content='Failed to play the music!')
                     return
             else:
                 if not playlist:
                     queue.songs.append(song)
                     queue.ids.append(id)
+                    queue.youtube_urls.append(original_url)
+
                     if not DOWNLOAD:
                         url = info_dict.get('url', None)
                         queue.urls.append(url)
@@ -255,6 +291,7 @@ async def play(interaction: discord.Interaction, link: str) -> None:
                     for entry in info_dict['entries']:
                         queue.songs.append(entry['title'])
                         queue.ids.append(entry['id'])
+                        queue.youtube_urls.append(entry['original_url'])
 
                         if not DOWNLOAD:
                             url = entry.get('url', None)
@@ -290,8 +327,7 @@ async def queue(interaction: discord.Interaction) -> None:
         await interaction.edit_original_response(content=f"""
 Currently playing: **{truncate(queue.current)}**
 Coming up:
-{q[guild_id].show()}
-        """)
+{queue.show()}""")
 
 
 @tree.command(name="skip",
@@ -367,6 +403,9 @@ async def remove(interaction: discord.Interaction, index: int) -> None:
     song = queue.songs.pop(index - 1)
     id = queue.ids.pop(index - 1)
     url = queue.urls.pop(index - 1)
-    await interaction.edit_original_response(content=f'Successfully removed "{song}" at index **{index}**!')
+    youtube_url = queue.youtube_urls.pop(index - 1)
+    await interaction.edit_original_response(
+        content=f'Successfully removed "{song}" at index **{index}**!')
+
 
 client.run(TOKEN)
