@@ -71,6 +71,7 @@ async def on_voice_state_update(member: discord.Member,
         queue.playing = False
 
         # Resetting queue
+        queue.voice_client = None
         queue.songs = []
         queue.ids = []
         queue.urls = []
