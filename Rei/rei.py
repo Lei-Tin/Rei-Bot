@@ -16,6 +16,8 @@ import os
 import re
 import yt_dlp
 
+import platform
+
 emoji_pattern = re.compile("["
                            u"\U0001F600-\U0001F64F"  # emoticons
                            u"\U0001F300-\U0001F5FF"  # symbols & pictographs
@@ -44,9 +46,11 @@ q = {}  # Maps from int to Queue
 
 # My opus library is in homebrew as I'm in M1 Mac
 # You can comment this out in Windows, I think
-discord.opus.load_opus('/opt/homebrew/Cellar/opus/1.4/lib/libopus.0.dylib')
-if not discord.opus.is_loaded():
-    raise RuntimeError('Opus failed to load')
+
+if platform.system() == 'Darwin':
+    discord.opus.load_opus('/opt/homebrew/Cellar/opus/1.4/lib/libopus.0.dylib')
+    if not discord.opus.is_loaded():
+        raise RuntimeError('Opus failed to load')
 
 
 @client.event
