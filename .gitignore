@@ -1,0 +1,6 @@
+**/.DS_Store
+.idea
+**/build
+**/__pycache__
+**/dist
+**/rei.spec
