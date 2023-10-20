@@ -16,6 +16,8 @@ import os
 import re
 import yt_dlp
 
+import csv
+
 import platform
 
 emoji_pattern = re.compile("["
@@ -27,7 +29,7 @@ emoji_pattern = re.compile("["
 
 intents = discord.Intents.default()
 
-# TEST_GUILD = discord.Object(id=[Your Guild ID HERE])
+TEST_GUILD = discord.Object(id=1135123159671119955)
 
 # If you want to use TEST_GUILD, be sure to add it to the end of the tree command decorators
 # Example:
@@ -89,7 +91,7 @@ async def on_ready() -> None:
     Event triggered when the bot is ready
     """
     # await tree.sync(guild=TEST_GUILD)
-    await tree.sync()  # Use the above line if you only want it to work in one guild
+    await tree.sync(guild=TEST_GUILD)  # Use the above line if you only want it to work in one guild
     print("Rei Bot is ready!")
 
 
@@ -227,9 +229,7 @@ async def play(interaction: discord.Interaction, link: str) -> None:
             'download_archive': os.path.join(*path, 'archive.txt'),
         }
     else:
-        ydl_opts = {
-            'format': 'bestaudio/best',
-        }
+        ydl_opts = YDL_OPTS_STREAM
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -412,5 +412,67 @@ async def remove(interaction: discord.Interaction, index: int) -> None:
     await interaction.edit_original_response(
         content=f'Successfully removed "{song}" at index **{index}**!')
 
+@tree.command(name="playlist-add",
+              description="Adds a song to a playlist with a given name, creates it if it does not exist",
+              guild=TEST_GUILD)
+@app_commands.describe(name='The name of the playlist',
+                       link='The music video link')
+async def pl_add(interaction: discord.Interaction, name: str, link: str) -> None:
+    """
+    Adds a song to a playlist
 
-client.run(TOKEN)
+    Does multiple things: 
+    1. Create the folder for playlists under the current guild if not exists
+    2. Check if the file exists with the "name".txt
+        a. If exists, append to it
+        b. If not exists, create and write in it
+    """
+    if not name.isalnum():
+        await interaction.response.send_message("The name of the playlist must be alphanumeric!")
+        return
+
+    if len(name) > MAX_SONG_NAME_LENGTH:
+        await interaction.response.send_message("The name of the playlist can only be lesser than 50 characters!")
+        return
+
+    await interaction.response.send_message("Processing...")
+
+    with yt_dlp.YoutubeDL(YDL_OPTS_STREAM) as ydl:
+        try:
+            # Disable search queries
+            if 'search_query' in link:
+                raise yt_dlp.utils.DownloadError('Search queries are not allowed!')
+
+            info_dict = ydl.extract_info(link, download=False)
+        except yt_dlp.utils.DownloadError:
+            await interaction.edit_original_response(
+            content='Failed to retrieve information from the link!')
+            return
+
+    guild_id = interaction.guild_id
+
+    path = ['Guilds', str(guild_id), 'playlists']
+    os.makedirs(os.path.join(*path), exist_ok=True)
+
+    path += [f'{name}.csv']
+
+    song = info_dict.get('title', None)
+    id = info_dict.get('id', None)
+    original_url = info_dict.get('original_url', None)
+
+    if os.path.isfile(os.path.join(*path)):
+        # If the file exists with name.txt
+        with open(os.path.join(*path), 'a+', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([song, id, original_url])
+    else:
+        with open(os.path.join(*path), 'w+', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['name', 'id', 'orig_url'])
+            writer.writerow([song, id, original_url])
+
+    await interaction.edit_original_response(content=f'Successfully added "**{truncate(song)}**" to playlist "**{name}**"')    
+    
+
+if __name__ == '__main__':
+    client.run(TOKEN)

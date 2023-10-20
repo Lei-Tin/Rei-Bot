@@ -10,3 +10,7 @@ FFMPEG_OPTIONS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 10',
     'options': '-vn'
 }
+
+YDL_OPTS_STREAM = {
+    'format': 'bestaudio/best',
+}
