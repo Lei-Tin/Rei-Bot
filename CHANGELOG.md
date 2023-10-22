@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3] - 2023-10-22
+
+### Added
+
+- Playlist features implemented using CSV files stored under each guild's directory. 
+- Added `/playlist-add [name] [URL]` to add a song to the playlist
+- Added `/playlist-remove [name] [index]` to remove a song from the playlist
+- Added `/playlist-show` to show all the playlists available in the current server
+- Added `/playlist-view [name]` to show the songs in the playlist with a given name
+- Added `/playlist-enqueue [name]` to enqueue a playlist to the currently playing queue
+
+### Fixed
+
+- Fixed a bug where if you execute the script from a different directory, the `Guilds` folder will be in a wrong directory. 
+
 ## [1.2.2] - 2023-08-04
 
 ### Added
