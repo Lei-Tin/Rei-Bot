@@ -1,4 +1,4 @@
-# Rei-Bot v1.2.2
+# Rei-Bot v1.3
 
 A Discord Bot that is used to play music
 
@@ -22,10 +22,15 @@ Please use "/" to see the available commands after adding the bot to the server
 - /queue - Shows the current list of songs
 - /clear - To clear the whole queue
 - /remove [index] - To remove a song from the queue with an index
+- /playlist-add [name] [URL] - To add a song with the given URL to the specified playlist
+- /playlist-remove [name] [index] - To remove a song from the playlist with the given name and index
+- /playlist-show - To show all the playlists available in the current server
+- /playlist-view [name] - To show the songs in the playlist with a given name
+- /playlist-enqueue [name] - To enqueue a playlist to the currently playing queue
 
 # Requirements
 
-Application is developed on ARM Mac, and is currently not tested on other platforms.
+Application is developed on ARM Mac. The bot will also work on Windows 11, but needs some setup with FFMpeg, which includes altering the PATH.  
 
 - macOS Ventura 13.4
 - Python 3.11.4
