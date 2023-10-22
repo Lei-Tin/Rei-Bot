@@ -3,7 +3,7 @@ Configurations file for Rei
 """
 
 TOKEN = "Your token here"
-MAX_SONG_NAME_LENGTH = 50
+MAX_SONG_NAME_LENGTH = 100
 DOWNLOAD = False
 
 FFMPEG_OPTIONS = {
