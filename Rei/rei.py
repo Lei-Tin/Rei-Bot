@@ -33,7 +33,9 @@ FILE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 if os.path.isfile(os.path.join(FILE_DIR, 'discord_token')):
     with open(os.path.join(FILE_DIR, 'discord_token')) as f:
-        TOKEN = f.readline().strip()
+        content = f.readline().strip()
+        if content != '':
+            TOKEN = content
             
 
 # TEST_GUILD = discord.Object(id=1135123159671119955)

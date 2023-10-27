@@ -9,7 +9,8 @@ RUN apk add opus
 
 RUN echo "Successfully setup the environment!"
 
-RUN --mount=type=secret,id=DISCORD_TOKEN \ 
-    cat /run/secrets/DISCORD_TOKEN >> ./Rei/discord_token
+ARG token=""
+
+RUN echo "${token}" >> ./Rei/discord_token
 
 CMD [ "python", "./Rei/rei.py"]
