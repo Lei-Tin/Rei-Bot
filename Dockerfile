@@ -9,7 +9,7 @@ RUN apk add opus
 
 RUN echo "Successfully setup the environment!"
 
-RUN --mount=type=secret,id=discord_token \ 
-    export DISCORD_TOKEN=$(cat /run/secrets/discord_token)
+RUN --mount=type=secret,id=DISCORD_TOKEN \ 
+    export DISCORD_TOKEN=$(cat /run/secrets/DISCORD_TOKEN)
 
 CMD [ "python", "./Rei/rei.py"]

@@ -36,7 +36,7 @@ jobs:
         tags: ${{ secrets.DOCKERHUB_USERNAME }}/reibot:latest
         file: ./Dockerfile
         secrets: |
-          "discord_token=${{ secrets.DISCORD_TOKEN }}"
+          "DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}"
         
   deploy:
     runs-on: ubuntu-latest

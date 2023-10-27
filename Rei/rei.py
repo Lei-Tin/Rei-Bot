@@ -21,6 +21,7 @@ import csv
 import platform
 
 TOKEN = os.environ.get("DISCORD_TOKEN", TOKEN)
+print(TOKEN)
 
 emoji_pattern = re.compile("["
                            u"\U0001F600-\U0001F64F"  # emoticons
