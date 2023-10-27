@@ -56,6 +56,11 @@ if platform.system() == 'Darwin':
     if not discord.opus.is_loaded():
         raise RuntimeError('Opus failed to load')
 
+if platform.system() == 'Linux':
+    discord.opus.load_opus('/usr/lib/libopus.so.0.9.0')
+    if not discord.opus.is_loaded():
+        raise RuntimeError('Opus failed to load')
+
 @client.event
 async def on_ready() -> None:
     """
