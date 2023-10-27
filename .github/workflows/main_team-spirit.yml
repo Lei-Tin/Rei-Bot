@@ -35,7 +35,8 @@ jobs:
         push: true
         tags: ${{ secrets.DOCKERHUB_USERNAME }}/reibot:latest
         file: ./Dockerfile
-        build_args: "token=${{ secrets.DISCORD_TOKEN }}"
+        build_args: |
+          token=${{ secrets.DISCORD_TOKEN }}
         
   deploy:
     runs-on: ubuntu-latest
