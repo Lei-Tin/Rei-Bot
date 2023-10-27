@@ -29,7 +29,7 @@ jobs:
       uses: docker/build-push-action@v3
       with:
         push: true
-        tags: index.docker.io/${{ secrets.AzureAppService_ContainerUsername_bbe69a826f93478a9d3f77c32f45983c }}/hleitr/reibot:${{ github.sha }}
+        tags: ${{ secrets.AzureAppService_ContainerUsername_bbe69a826f93478a9d3f77c32f45983c }}/reibot:latest
         file: ./Dockerfile
 
   deploy:
