@@ -20,8 +20,6 @@ import csv
 
 import platform
 
-TOKEN = os.environ.get("DISCORD_TOKEN", TOKEN)
-
 emoji_pattern = re.compile("["
                            u"\U0001F600-\U0001F64F"  # emoticons
                            u"\U0001F300-\U0001F5FF"  # symbols & pictographs
@@ -32,6 +30,11 @@ emoji_pattern = re.compile("["
 intents = discord.Intents.default()
 
 FILE_DIR = os.path.dirname(os.path.realpath(__file__))
+
+if os.path.isfile(os.path.join(FILE_DIR, 'discord_token')):
+    with open(os.path.join(FILE_DIR, 'discord_token')) as f:
+        TOKEN = f.readline().strip()
+            
 
 # TEST_GUILD = discord.Object(id=1135123159671119955)
 
