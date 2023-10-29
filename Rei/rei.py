@@ -97,15 +97,8 @@ async def on_voice_state_update(member: discord.Member,
         if queue is None:
             return
 
-        queue.playing = False
-
         # Resetting queue
-        queue.voice_client = None
-        queue.songs = []
-        queue.ids = []
-        queue.urls = []
-        queue.youtube_urls = []
-        queue.current = ''
+        del q[guild_id]
 
 
 def play_song(guild_id: int) -> None:
@@ -151,6 +144,8 @@ def play_song(guild_id: int) -> None:
             queue.text_channel.send(f'Queue is now empty!'),
             client.loop)
         queue.playing = False
+        
+        del q[guild_id]
 
 
 async def play_music(guild_id: int):
@@ -212,9 +207,6 @@ async def play(interaction: discord.Interaction, link: str) -> None:
 
     text_channel = interaction.channel
 
-    # interaction.message.content stores the information
-    # interaction.response.send_message sends a message
-    # interaction.guild_id gives the id of this message's guild
     guild_id = interaction.guild_id
 
     queue = q.get(guild_id, None)
@@ -360,7 +352,7 @@ async def skip(interaction: discord.Interaction) -> None:
     if queue is None:
         await interaction.edit_original_response(content="There is no queue!")
     else:
-        if queue.voice_client is not None:
+        if queue.voice_client is not None and queue.voice_client.is_playing():
             queue.voice_client.stop()
 
             await interaction.edit_original_response(content="Skipped")
