@@ -15,6 +15,8 @@ from discord import app_commands
 import os
 import re
 import yt_dlp
+import logging
+logger = logging.getlogger(__main__)
 
 import csv
 
@@ -75,7 +77,12 @@ async def on_ready() -> None:
     """
     # await tree.sync(guild=TEST_GUILD)
     await tree.sync()  # Use the above line if you only want it to work in one guild
-    print("Rei Bot is ready!")
+
+    # Change the version string every update
+    version = 'Oct 29 2AM'
+
+    logger.info('Rei Bot is ready!')
+    logger.info(f'Version: {version}')
 
 
 @client.event
@@ -93,6 +100,8 @@ async def on_voice_state_update(member: discord.Member,
     guild_id = member.guild.id
 
     if before.channel is not None and after.channel is None and member.bot is True:
+        logger.info(f'Member "{member.name}" has disconnected in guild with ID: {guild_id}')
+
         queue = q.get(guild_id, None)
         if queue is None:
             return
@@ -154,7 +163,7 @@ async def play_music(guild_id: int):
     :param guild_id:
     :return:
     """
-    print('Initializing play')
+    logger.info(f'Initializing play for guild with ID: {guild_id}')
 
     queue = q.get(guild_id, None)
     if queue is None:
@@ -194,11 +203,15 @@ async def play(interaction: discord.Interaction, link: str) -> None:
     Play a music with the provided link
     The parameters will be passed in from the message
     """
-    print('Attempt to enqueue a song')
+    await interaction.response.send_message("Processing...")
+
+    guild_id = interaction.guild_id
+
+    logger.info(f'Attempt to enqueue a song for guild with ID: {guild_id}')
+    logger.info(f'Attempt to enqueue a song with the link: {link}')
 
     voice = interaction.user.voice
 
-    await interaction.response.send_message("Processing...")
     if voice is None:
         await interaction.edit_original_response(content='You are not in a voice channel!')
         return
@@ -206,8 +219,6 @@ async def play(interaction: discord.Interaction, link: str) -> None:
         voice_channel = voice.channel
 
     text_channel = interaction.channel
-
-    guild_id = interaction.guild_id
 
     queue = q.get(guild_id, None)
     if queue is None or queue.voice_channel is None:
@@ -308,12 +319,12 @@ async def play(interaction: discord.Interaction, link: str) -> None:
                             queue.urls.append(url)
 
             if playlist:
-                print('Successfully Enqueued a Playlist')
+                logger.info(f'Successfully enqueue a playlist ({len(info_dict['entries'])} songs) for guild with ID: {guild_id}')
                 await interaction.edit_original_response(
                     content=f'Successfully enqueued {len(info_dict["entries"])} songs!'
                 )
             else:
-                print('Successfully Enqueued a Song')
+                logger.info(f'Successfully enqueue a song for guild with ID: {guild_id}')
                 await interaction.edit_original_response(
                     content=f'Successfully enqueued "**{truncate(song)}**"!'
                 )
@@ -326,10 +337,11 @@ async def play(interaction: discord.Interaction, link: str) -> None:
 @tree.command(name="queue",
               description="Shows the current queue")
 async def queue(interaction: discord.Interaction) -> None:
-    print('Printing current queue')
     await interaction.response.send_message("Processing...")
-
+    
     guild_id = interaction.guild_id
+    logger.info(f'Printing current queue for guild with ID: {guild_id}')
+
     queue = q.get(guild_id, None)
     if queue is None:
         await interaction.edit_original_response(content="There is no queue!")
@@ -343,10 +355,11 @@ Coming up:
 @tree.command(name="skip",
               description="Skips the current music playing")
 async def skip(interaction: discord.Interaction) -> None:
-    print('Skipping current song')
     await interaction.response.send_message("Processing...")
 
     guild_id = interaction.guild_id
+    logger.info(f'Skipping one song in guild with ID: {guild_id}')
+
     queue = q.get(guild_id, None)
 
     if queue is None:
@@ -369,10 +382,11 @@ async def clear(interaction: discord.Interaction) -> None:
     Clears the current queue
     :param interaction:
     """
-    print('Clearing current queue')
     await interaction.response.send_message("Processing...")
 
     guild_id = interaction.guild_id
+    logger.info(f"Clearing the queue in guild with ID: {guild_id}")
+    
     queue = q.get(guild_id, None)
 
     if queue is None:
@@ -396,8 +410,10 @@ async def remove(interaction: discord.Interaction, index: int) -> None:
     :param index:
     :return:
     """
-    print('Attempting to remove a song')
+
     guild_id = interaction.guild_id
+
+    logger.info(f"Removing a song with index {index} in guild with ID: {guild_id}")
 
     await interaction.response.send_message("Processing...")
 
