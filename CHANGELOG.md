@@ -6,9 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- Playlist add can now shuffle the playlist
+- Playlist enqueue can now shuffle the playlist. The command is changed to `/playlist-enqueue [name] [shuffle]`
 - Added complete GitHub Actions to upload to Docker Hub Image Repository
-- Deployed the bot on Microsoft Azure (currently in local testing, but can run 24x7)
+- Deployed the bot on Microsoft Azure (currently in local testing, but can run 24x7 with online storage with playlists)
 
 ### Fixed
 
