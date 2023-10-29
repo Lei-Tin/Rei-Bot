@@ -16,7 +16,9 @@ import os
 import re
 import yt_dlp
 import logging
-logger = logging.getlogger(__main__)
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 import csv
 
