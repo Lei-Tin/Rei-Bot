@@ -319,7 +319,7 @@ async def play(interaction: discord.Interaction, link: str) -> None:
                             queue.urls.append(url)
 
             if playlist:
-                logger.info(f'Successfully enqueue a playlist ({len(info_dict['entries'])} songs) for guild with ID: {guild_id}')
+                logger.info(f'Successfully enqueue a playlist ({len(info_dict["entries"])} songs) for guild with ID: {guild_id}')
                 await interaction.edit_original_response(
                     content=f'Successfully enqueued {len(info_dict["entries"])} songs!'
                 )
