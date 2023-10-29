@@ -1,4 +1,4 @@
-# Rei-Bot v1.3
+# Rei-Bot v1.3.1
 
 A Discord Bot that is used to play music
 
@@ -26,7 +26,7 @@ Please use "/" to see the available commands after adding the bot to the server
 - /playlist-remove [name] [index] - To remove a song from the playlist with the given name and index
 - /playlist-show - To show all the playlists available in the current server
 - /playlist-view [name] - To show the songs in the playlist with a given name
-- /playlist-enqueue [name] - To enqueue a playlist to the currently playing queue
+- /playlist-enqueue [name] [shuffle] - To enqueue a playlist to the currently playing queue, with an option to shuffle or not
 
 # Requirements
 

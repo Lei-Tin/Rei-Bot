@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2023-10-29
+
+### Added
+
+- Playlist add can now shuffle the playlist
+- Added complete GitHub Actions to upload to Docker Hub Image Repository
+- Deployed the bot on Microsoft Azure (currently in local testing, but can run 24x7)
+
+### Fixed
+
+- Changed the logic for resetting the bot, removed the whole `Queue` object when we need a reset
+
 ## [1.3] - 2023-10-22
 
 ### Added
