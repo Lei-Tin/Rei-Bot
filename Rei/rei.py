@@ -647,7 +647,7 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
         return
 
     if shuffle:
-        entries = entries[0] + random.sample(entries[1:], len(entries) - 1)
+        entries = [entries[0]] + random.sample(entries[1:], len(entries) - 1)
 
     for i in range(1, len(entries)):
         song_name, song_id, youtube_url = entries[i]
