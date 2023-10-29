@@ -16,6 +16,7 @@ import os
 import re
 import yt_dlp
 import logging
+import random
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -81,7 +82,7 @@ async def on_ready() -> None:
     await tree.sync()  # Use the above line if you only want it to work in one guild
 
     # Change the version string every update
-    version = 'Oct 29 2AM'
+    version = 'Oct 29 1 PM'
 
     logger.info('Rei Bot is ready!')
     logger.info(f'Version: {version}')
@@ -101,7 +102,7 @@ async def on_voice_state_update(member: discord.Member,
     """
     guild_id = member.guild.id
 
-    if before.channel is not None and after.channel is None and member.bot is True:
+    if before.channel is not None and after.channel is None and member.bot is True and member.name == 'Rei-Bot':
         logger.info(f'Member "{member.name}" has disconnected in guild with ID: {guild_id}')
 
         queue = q.get(guild_id, None)
@@ -601,8 +602,9 @@ async def pl_remove(interaction: discord.Interaction, name: str, index: int) -> 
 
 @tree.command(name="playlist-enqueue",
               description="Enqueues the playlist with the given name in the current queue")
-@app_commands.describe(name='The name of the playlist')
-async def pl_enqueue(interaction: discord.Interaction, name: str) -> None:
+@app_commands.describe(name='The name of the playlist', 
+                       shuffle='If the songs will be enqueued in random orders')
+async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool) -> None:
     guild_id = interaction.guild_id
 
     if not name.isalnum():
@@ -639,6 +641,13 @@ async def pl_enqueue(interaction: discord.Interaction, name: str) -> None:
         voice_channel = voice.channel
 
     text_channel = interaction.channel
+
+    if len(entries) == 1:
+        logger.error(f'Only the header row exists for file "{name}.csv"!')
+        return
+
+    if shuffle:
+        entries = entries[0] + random.sample(entries[1:], len(entries) - 1)
 
     for i in range(1, len(entries)):
         song_name, song_id, youtube_url = entries[i]
