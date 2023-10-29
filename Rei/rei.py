@@ -218,7 +218,7 @@ async def play(interaction: discord.Interaction, link: str) -> None:
     guild_id = interaction.guild_id
 
     queue = q.get(guild_id, None)
-    if queue is None:
+    if queue is None or queue.voice_channel is None:
         queue = Queue(voice_channel, text_channel)
         q[guild_id] = queue
     else:
