@@ -2,11 +2,11 @@
 
 A Discord Bot that is used to play music
 
-Written in Python, not configured for public usage.
+Written in Python, not configured for public usage. Currently hosted on Microsoft Azure on selected servers to provide music playing features. 
 
 # Features
 
-- Play music from YouTube (Supports URL, but not playlist)
+- Play music from YouTube
 - Have a queue of songs
 - Choose to download the songs or stream directly
 - Supports URL from YouTube playlists, enqueues all of them
@@ -17,12 +17,12 @@ Written in Python, not configured for public usage.
 
 Please use "/" to see the available commands after adding the bot to the server
 
-- /play [URL] - Play something from URL
+- /play [URL] - Play something from URL. Note: **SUPPORTS** YouTube Playlist links
 - /skip - Skips the currently playing song
 - /queue - Shows the current list of songs
 - /clear - To clear the whole queue
 - /remove [index] - To remove a song from the queue with an index
-- /playlist-add [name] [URL] - To add a song with the given URL to the specified playlist
+- /playlist-add [name] [URL] - To add a song with the given URL to the specified playlist. Note: **DOES NOT SUPPORT** YouTube Playlist links at the moment
 - /playlist-remove [name] [index] - To remove a song from the playlist with the given name and index
 - /playlist-show - To show all the playlists available in the current server
 - /playlist-view [name] - To show the songs in the playlist with a given name
@@ -30,11 +30,12 @@ Please use "/" to see the available commands after adding the bot to the server
 
 # Requirements
 
-Application is developed on ARM Mac. The bot will also work on Windows 11, but needs some setup with FFMpeg, which includes altering the PATH.  
+Application is developed on ARM Mac and Windows 11. 
 
-- macOS Ventura 13.4
+It is tested to run perfectly on Windows 11, Mac OS Ventura 13.4, Alpine Linux. 
+
 - Python 3.11.4
 - discord.py 2.3.1
 - yt-dlp 2023.7.6
 - ffmpeg 6.0
-- opus (Needs to install through homebrew and navigate through)
+- opus library (If on Linux system, might need to install through package manager)
