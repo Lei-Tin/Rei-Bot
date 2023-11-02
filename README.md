@@ -38,4 +38,5 @@ It is tested to run perfectly on Windows 11, Mac OS Ventura 13.4, Alpine Linux.
 - discord.py 2.3.1
 - yt-dlp 2023.7.6
 - ffmpeg 6.0
+- PyNaCl 1.5.0
 - opus library (If on Linux system, might need to install through package manager)
