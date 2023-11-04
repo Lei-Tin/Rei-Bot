@@ -133,6 +133,7 @@ def play_song(guild_id: int) -> None:
 
         song = queue.songs.pop(0) if queue.songs else ''
         id = queue.ids.pop(0) if queue.ids else ''
+        original_link = queue.youtube_urls.pop(0) if queue.youtube_urls else ''
 
         queue.current = song
 
@@ -144,8 +145,6 @@ def play_song(guild_id: int) -> None:
             url = queue.urls.pop(0) if queue.urls else ''
             voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS),
                               after=lambda e: play_song(guild_id))
-
-        original_link = queue.youtube_urls.pop(0) if queue.youtube_urls else ''
 
         asyncio.run_coroutine_threadsafe(
             queue.text_channel.send(f'Now playing: "[{truncate(emoji_pattern.sub(r"", song))}]({original_link})"!'),
