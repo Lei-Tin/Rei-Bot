@@ -713,7 +713,9 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
                 url = info_dict.get('url', None)
                 queue.urls.append(url)
 
-    await add_songs_to_queue(guild_id, entries[2:])
+    # Using a task to make it run concurrently
+    task = asyncio.create_task(add_songs_to_queue(guild_id, entries[2:]))
+    await task
     
     try:
         if queue.voice_client is None:

@@ -2,7 +2,7 @@
 Configurations file for Rei
 """
 
-TOKEN = "Your token here"
+TOKEN = "MTEzNTEyMjUwNzU0OTExODQ5NA.GNKJoD.5kJaFLea9J6rf-HD2fY2-Kwr7CMBx6l5BisczI"
 MAX_SONG_NAME_LENGTH = 100
 DOWNLOAD = False
 
