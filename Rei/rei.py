@@ -612,7 +612,7 @@ async def pl_remove(interaction: discord.Interaction, name: str, index: int) -> 
     await interaction.edit_original_response(content=f'Successfully removed "{truncate(song_name)}" at index {index}!')
 
 @to_thread
-async def add_songs_to_queue(guild_id: int, songs: List[str]):
+def add_songs_to_queue(guild_id: int, songs: List[str]):
     """Helper function for the playlist enqueue, enqueues songs slowly, 5 songs at a time"""
 
     if len(songs) == 0:
