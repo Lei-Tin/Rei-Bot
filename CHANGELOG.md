@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.2] - 2023-11-05
+
+### Fixed
+
+- Performance improvements for `/playlist-enqueue [name] [shuffle]`. Now instead of processing every single song at once, it processes the very first song, then queues up the other songs concurrently in the background. 
+- Utilized task scheduling (specifically for the enqueues) that corresponds to each guild, cancels all of them when a disconnection event occurs (ensure no `None` type access).
+
 ## [1.3.1] - 2023-10-29
 
 ### Added

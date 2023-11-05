@@ -1,4 +1,4 @@
-# Rei-Bot v1.3.1
+# Rei-Bot v1.3.2
 
 A Discord Bot that is used to play music
 
