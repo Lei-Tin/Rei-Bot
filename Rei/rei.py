@@ -720,13 +720,6 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
             if not DOWNLOAD:
                 url = info_dict.get('url', None)
                 queue.urls.append(url)
-
-    logger.info("Calling add_songs_to_queue to enqueue the rest of the songs")
-    # Using a task to make it run concurrently
-    
-    asyncio.create_task(add_songs_to_queue(guild_id, entries[2:]))
-
-    logger.info("Got out of add_songs_to_queue")
     
     try:
         if queue.voice_client is None:
@@ -741,6 +734,13 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
     except discord.ClientException as e:
         await interaction.edit_original_response(content='Failed to play the music!')
         return
+
+    logger.info("Calling add_songs_to_queue to enqueue the rest of the songs")
+    
+    # Using a task to make it run concurrently
+    client.loop.create_task(add_songs_to_queue(guild_id, entries[2:]))
+
+    logger.info("Got out of add_songs_to_queue")
 
     await interaction.edit_original_response(content=f'Successfully enqueued {len(entries) - 1} songs!')
 
