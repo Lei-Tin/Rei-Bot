@@ -607,14 +607,16 @@ async def pl_remove(interaction: discord.Interaction, name: str, index: int) -> 
 
 
 async def add_songs_to_queue(guild_id: int, songs: List[str]):
-    """Helper function for the playlist enqueue, enqueues songs slowly"""
+    """Helper function for the playlist enqueue, enqueues songs slowly, 5 songs at a time"""
 
     queue = q.get(guild_id, None)
     if queue is None:
         return
     
-    for entries in songs:
-        song_name, song_id, youtube_url = entries
+    logger.info(f"Enqueueing 5 songs for {guild_id} from the playlist")
+    
+    for i in range(min(5, len(songs))):
+        song_name, song_id, youtube_url = songs[i]
 
         with yt_dlp.YoutubeDL(YDL_OPTS_STREAM) as ydl:
             # Disable search queries
@@ -639,6 +641,8 @@ async def add_songs_to_queue(guild_id: int, songs: List[str]):
                 if not DOWNLOAD:
                     url = info_dict.get('url', None)
                     queue.urls.append(url)
+
+    client.loop.create_task(add_songs_to_queue(guild_id, songs[5:]))
 
 
 @tree.command(name="playlist-enqueue",
