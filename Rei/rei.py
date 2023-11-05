@@ -609,6 +609,9 @@ async def pl_remove(interaction: discord.Interaction, name: str, index: int) -> 
 async def add_songs_to_queue(guild_id: int, songs: List[str]):
     """Helper function for the playlist enqueue, enqueues songs slowly, 5 songs at a time"""
 
+    if len(songs) == 0:
+        return
+
     queue = q.get(guild_id, None)
     if queue is None:
         return
