@@ -43,7 +43,7 @@ if os.path.isfile(os.path.join(FILE_DIR, 'discord_token')):
             TOKEN = content
             
 
-TEST_GUILD = discord.Object(id=1018332419272753265)
+# TEST_GUILD = discord.Object(id=1135123159671119955)
 
 # If you want to use TEST_GUILD, be sure to add it to the end of the tree command decorators
 # Example:
@@ -81,8 +81,8 @@ async def on_ready() -> None:
     """
     Event triggered when the bot is ready
     """
-    await tree.sync(guild=TEST_GUILD)
-    # await tree.sync()  # Use the above line if you only want it to work in one guild
+    # await tree.sync(guild=TEST_GUILD)
+    await tree.sync()  # Use the above line if you only want it to work in one guild
 
     logger.info('Rei Bot is ready!')
     logger.info(f'Version: {version}')
@@ -114,7 +114,7 @@ async def on_voice_state_update(member: discord.Member,
 
 @tree.command(name="version",
               description="Prints the version of the bot")
-async def play(interaction: discord.Interaction) -> None:
+async def version(interaction: discord.Interaction) -> None:
     """
     Prints the version of the bot
     """
@@ -642,7 +642,7 @@ async def add_songs_to_queue(guild_id: int, songs: List[str]):
 
 
 @tree.command(name="playlist-enqueue",
-              description="Enqueues the playlist with the given name in the current queue", guild=TEST_GUILD)
+              description="Enqueues the playlist with the given name in the current queue")
 @app_commands.describe(name='The name of the playlist', 
                        shuffle='If the songs will be enqueued in random orders')
 async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool) -> None:
