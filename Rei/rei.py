@@ -118,7 +118,7 @@ async def print_version(interaction: discord.Interaction) -> None:
     """
     Prints the version of the bot
     """
-    await interaction.send_message(content=f"Version: {version}")
+    await interaction.response.send_message(content=f"Version: {version}")
 
 
 def play_song(guild_id: int) -> None:
