@@ -3,7 +3,7 @@ The main file for the bot
 """
 import asyncio
 
-from typing import Union, List
+from typing import Union, List, Callable, Coroutine
 
 from config import *
 from Queue import Queue
@@ -17,6 +17,7 @@ import re
 import yt_dlp
 import logging
 import random
+import functools
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -120,6 +121,11 @@ async def print_version(interaction: discord.Interaction) -> None:
     """
     await interaction.response.send_message(content=f"Version: {version}")
 
+def to_thread(func: Callable) -> Coroutine:
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        return await asyncio.to_thread(func, *args, **kwargs)
+    return wrapper
 
 def play_song(guild_id: int) -> None:
     """
@@ -605,7 +611,7 @@ async def pl_remove(interaction: discord.Interaction, name: str, index: int) -> 
 
     await interaction.edit_original_response(content=f'Successfully removed "{truncate(song_name)}" at index {index}!')
 
-
+@to_thread
 async def add_songs_to_queue(guild_id: int, songs: List[str]):
     """Helper function for the playlist enqueue, enqueues songs slowly, 5 songs at a time"""
 
