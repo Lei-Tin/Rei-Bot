@@ -73,6 +73,9 @@ if platform.system() == 'Linux':
     if not discord.opus.is_loaded():
         raise RuntimeError('Opus failed to load')
 
+# Change the version string every update
+version = 'Nov 5 1 AM'
+
 @client.event
 async def on_ready() -> None:
     """
@@ -80,9 +83,6 @@ async def on_ready() -> None:
     """
     # await tree.sync(guild=TEST_GUILD)
     await tree.sync()  # Use the above line if you only want it to work in one guild
-
-    # Change the version string every update
-    version = 'Oct 29 1 PM'
 
     logger.info('Rei Bot is ready!')
     logger.info(f'Version: {version}')
@@ -111,6 +111,14 @@ async def on_voice_state_update(member: discord.Member,
 
         # Resetting queue
         del q[guild_id]
+
+@tree.command(name="version",
+              description="Prints the version of the bot")
+async def play(interaction: discord.Interaction) -> None:
+    """
+    Prints the version of the bot
+    """
+    await interaction.send_message(content=f"Version: {version}")
 
 
 def play_song(guild_id: int) -> None:
