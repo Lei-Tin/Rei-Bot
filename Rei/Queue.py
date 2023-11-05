@@ -20,6 +20,7 @@ class Queue:
         self.text_channel = text_channel
         self.voice_client = None
         self.playing = False
+        self.tasks = []
 
     def show(self) -> str:
         """

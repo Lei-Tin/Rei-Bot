@@ -109,6 +109,13 @@ async def on_voice_state_update(member: discord.Member,
         queue = q.get(guild_id, None)
         if queue is None:
             return
+        
+        for task in queue.tasks:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
         # Resetting queue
         del q[guild_id]
@@ -651,7 +658,8 @@ def add_songs_to_queue(guild_id: int, songs: List[str]):
                     url = info_dict.get('url', None)
                     queue.urls.append(url)
 
-    client.loop.create_task(add_songs_to_queue(guild_id, songs[5:]))
+    task = client.loop.create_task(add_songs_to_queue(guild_id, songs[5:]))
+    queue.tasks.append(task)
 
 
 @tree.command(name="playlist-enqueue",
@@ -751,7 +759,8 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
     logger.info("Calling add_songs_to_queue to enqueue the rest of the songs")
     
     # Using a task to make it run concurrently
-    client.loop.create_task(add_songs_to_queue(guild_id, entries[2:]))
+    task = client.loop.create_task(add_songs_to_queue(guild_id, entries[2:]))
+    queue.tasks.append(task)
 
     logger.info("Got out of add_songs_to_queue")
 
