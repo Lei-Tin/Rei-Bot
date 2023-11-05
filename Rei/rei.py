@@ -114,7 +114,7 @@ async def on_voice_state_update(member: discord.Member,
 
 @tree.command(name="version",
               description="Prints the version of the bot")
-async def version(interaction: discord.Interaction) -> None:
+async def print_version(interaction: discord.Interaction) -> None:
     """
     Prints the version of the bot
     """
@@ -723,8 +723,8 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
 
     logger.info("Calling add_songs_to_queue to enqueue the rest of the songs")
     # Using a task to make it run concurrently
-    task = asyncio.create_task(add_songs_to_queue(guild_id, entries[2:]))
-    await task
+    
+    asyncio.create_task(add_songs_to_queue(guild_id, entries[2:]))
 
     logger.info("Got out of add_songs_to_queue")
     
