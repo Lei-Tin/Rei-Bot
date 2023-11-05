@@ -3,7 +3,7 @@ The main file for the bot
 """
 import asyncio
 
-from typing import Union
+from typing import Union, List
 
 from config import *
 from Queue import Queue
@@ -598,6 +598,41 @@ async def pl_remove(interaction: discord.Interaction, name: str, index: int) -> 
     await interaction.edit_original_response(content=f'Successfully removed "{truncate(song_name)}" at index {index}!')
 
 
+async def add_songs_to_queue(guild_id: int, songs: List[str, str, str]):
+    """Helper function for the playlist enqueue, enqueues songs slowly"""
+
+    queue = q.get(guild_id, None)
+    if queue is None:
+        return
+    
+    for entries in songs:
+        song_name, song_id, youtube_url = entries
+
+        with yt_dlp.YoutubeDL(YDL_OPTS_STREAM) as ydl:
+            # Disable search queries
+            info_dict = ydl.extract_info(youtube_url, download=False)
+            
+            song = info_dict.get('title', None)
+            id = info_dict.get('id', None)
+            original_url = info_dict.get('original_url', None)
+
+            if not queue.playing:
+                queue.songs.append(song)
+                queue.ids.append(id)
+                queue.youtube_urls.append(original_url)
+                if not DOWNLOAD:
+                    url = info_dict.get('url', None)
+                    queue.urls.append(url)
+            else:
+                queue.songs.append(song)
+                queue.ids.append(id)
+                queue.youtube_urls.append(original_url)
+
+                if not DOWNLOAD:
+                    url = info_dict.get('url', None)
+                    queue.urls.append(url)
+
+
 @tree.command(name="playlist-enqueue",
               description="Enqueues the playlist with the given name in the current queue")
 @app_commands.describe(name='The name of the playlist', 
@@ -647,37 +682,38 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
     if shuffle:
         entries = [entries[0]] + random.sample(entries[1:], len(entries) - 1)
 
-    for i in range(1, len(entries)):
-        song_name, song_id, youtube_url = entries[i]
+    song_name, song_id, youtube_url = entries[1]
 
-        with yt_dlp.YoutubeDL(YDL_OPTS_STREAM) as ydl:
-            # Disable search queries
-            info_dict = ydl.extract_info(youtube_url, download=False)
-            
-            song = info_dict.get('title', None)
-            id = info_dict.get('id', None)
-            original_url = info_dict.get('original_url', None)
+    with yt_dlp.YoutubeDL(YDL_OPTS_STREAM) as ydl:
+        # Disable search queries
+        info_dict = ydl.extract_info(youtube_url, download=False)
+        
+        song = info_dict.get('title', None)
+        id = info_dict.get('id', None)
+        original_url = info_dict.get('original_url', None)
 
-            queue = q.get(guild_id, None)
-            if queue is None:
-                queue = Queue(voice_channel, text_channel)
-                q[guild_id] = queue
+        queue = q.get(guild_id, None)
+        if queue is None:
+            queue = Queue(voice_channel, text_channel)
+            q[guild_id] = queue
 
-            if not queue.playing:
-                queue.songs.append(song)
-                queue.ids.append(id)
-                queue.youtube_urls.append(original_url)
-                if not DOWNLOAD:
-                    url = info_dict.get('url', None)
-                    queue.urls.append(url)
-            else:
-                queue.songs.append(song)
-                queue.ids.append(id)
-                queue.youtube_urls.append(original_url)
+        if not queue.playing:
+            queue.songs.append(song)
+            queue.ids.append(id)
+            queue.youtube_urls.append(original_url)
+            if not DOWNLOAD:
+                url = info_dict.get('url', None)
+                queue.urls.append(url)
+        else:
+            queue.songs.append(song)
+            queue.ids.append(id)
+            queue.youtube_urls.append(original_url)
 
-                if not DOWNLOAD:
-                    url = info_dict.get('url', None)
-                    queue.urls.append(url)
+            if not DOWNLOAD:
+                url = info_dict.get('url', None)
+                queue.urls.append(url)
+
+    await add_songs_to_queue(guild_id, entries[2:])
     
     try:
         if queue.voice_client is None:
