@@ -311,7 +311,7 @@ async def play(interaction: discord.Interaction, link: str) -> None:
 
                 try:
                     if queue.voice_client is None:
-                        voice_client = await voice_channel.connect(timeout=2.5,
+                        voice_client = await voice_channel.connect(timeout=VOICE_CALL_TIMEOUT,
                                                                    reconnect=True,
                                                                    self_mute=True,
                                                                    self_deaf=True)
@@ -744,7 +744,7 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
     
     try:
         if queue.voice_client is None:
-            voice_client = await voice_channel.connect(timeout=2.5,
+            voice_client = await voice_channel.connect(timeout=VOICE_CALL_TIMEOUT,
                                                         reconnect=True,
                                                         self_mute=True,
                                                         self_deaf=True)
