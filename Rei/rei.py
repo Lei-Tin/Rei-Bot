@@ -75,7 +75,7 @@ if platform.system() == 'Linux':
         raise RuntimeError('Opus failed to load')
 
 # Change the version string every update
-version = 'Nov 22 2:40 AM'
+version = 'Nov 23 10:30 PM'
 
 @client.event
 async def on_ready() -> None:
@@ -149,7 +149,8 @@ def play_song(guild_id: int) -> None:
     if not voice_client or not voice_client.is_connected():
         return
 
-    if len(queue.songs) > 0:
+    # We only continue playing if there are more than 1 people in the voice channel, including the bot, that is 2
+    if len(queue.songs) > 0 and len(q.voice_channel.members) >= 2:
         queue.playing = True
 
         song = queue.songs.pop(0) if queue.songs else ''
@@ -194,7 +195,7 @@ async def play_music(guild_id: int):
 
     voice_client = queue.voice_client
 
-    if len(queue.songs) > 0:
+    if len(queue.songs) > 0 and len(q.voice_channel.members) >= 2:
         queue.playing = True
 
         song = queue.songs.pop(0) if queue.songs else ''
