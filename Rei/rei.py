@@ -419,6 +419,9 @@ async def clear(interaction: discord.Interaction) -> None:
             await queue.voice_client.disconnect()
             await interaction.edit_original_response(content="Queue cleared!")
 
+            if guild_id in q:
+                del q[guild_id]
+
         else:
             await interaction.edit_original_response(content="Something went wrong!")
 
