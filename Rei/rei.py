@@ -75,7 +75,7 @@ if platform.system() == 'Linux':
         raise RuntimeError('Opus failed to load')
 
 # Change the version string every update
-version = 'Nov 23 10:30 PM'
+version = 'March 3 3:30 AM'
 
 @client.event
 async def on_ready() -> None:
@@ -417,13 +417,16 @@ async def clear(interaction: discord.Interaction) -> None:
     else:
         if queue.voice_client is not None:
             await queue.voice_client.disconnect()
-            await interaction.edit_original_response(content="Queue cleared!")
+            await interaction.edit_original_response(content="Queue cleared! (and disconnected)")
 
             if guild_id in q:
                 del q[guild_id]
 
         else:
-            await interaction.edit_original_response(content="Something went wrong!")
+            if guild_id in q:
+                del q[guild_id]
+
+            await interaction.edit_original_response(content="Queue cleared! (did not disconnect)")
 
 
 @tree.command(name="remove",
