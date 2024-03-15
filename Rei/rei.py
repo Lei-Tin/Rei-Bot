@@ -561,14 +561,17 @@ async def pl_view(interaction: discord.Interaction, name: str, page: int) -> Non
         for row in reader:
             names.append(row["name"])
 
-    if page > len(names) // MAX_DISPLAY_LENGTH + 1:
+    if page > len(names) // MAX_DISPLAY_LENGTH + 1 or len(names) % MAX_DISPLAY_LENGTH == 0 and page > len(names) // MAX_DISPLAY_LENGTH:
         await interaction.edit_original_response(content=f'The page number is invalid!')
         return
     
     names = names[(page - 1) * MAX_DISPLAY_LENGTH:page * MAX_DISPLAY_LENGTH]
 
+    # Ceiling division
+    total_pages = len(names) // MAX_DISPLAY_LENGTH + (len(names) % MAX_DISPLAY_LENGTH != 0) * 1
+
     await interaction.edit_original_response(
-            content=f'Playlist "{name}", Page {page}:\n' + '\n'.join([f'**{str(i + 1)}. **' + truncate(n) for i, n in enumerate(names)])
+            content=f'Playlist "{name}", Page {page}/{total_pages}:\n' + '\n'.join([f'**{str(int(page * MAX_DISPLAY_LENGTH) + i + 1)}. **' + truncate(n) for i, n in enumerate(names)])
         )
     
 
