@@ -75,7 +75,7 @@ if platform.system() == 'Linux':
         raise RuntimeError('Opus failed to load')
 
 # Change the version string every update
-version = 'March 3 3:30 AM'
+version = 'March 15 4:00 AM'
 
 @client.event
 async def on_ready() -> None:
@@ -527,9 +527,10 @@ async def pl_add(interaction: discord.Interaction, name: str, link: str) -> None
     await interaction.edit_original_response(content=f'Successfully added "**{truncate(song)}**" to playlist "**{name}**"')
 
 @tree.command(name="playlist-view",
-              description="Views the playlist with the given name, shows a list of the songs added")
+              description="Views the playlist with the given name, shows a list of the songs added", 
+              page="The page number (Each page is 10 songs)")
 @app_commands.describe(name='The name of the playlist')
-async def pl_view(interaction: discord.Interaction, name: str) -> None:
+async def pl_view(interaction: discord.Interaction, name: str, page: int) -> None:
     """
     Checks the songs included in the playlist with the given name
     """
@@ -560,7 +561,13 @@ async def pl_view(interaction: discord.Interaction, name: str) -> None:
         for row in reader:
             names.append(row["name"])
 
-    await interaction.edit_original_response(content=f'Playlist "{name}":\n' + '\n'.join([f'**{str(i + 1)}. **' + truncate(n) for i, n in enumerate(names)]))
+    if page > len(names) // 10 + 1:
+        await interaction.edit_original_response(content=f'The page number is invalid!')
+        return
+    
+    names = names[(page - 1) * 10:page * 10]
+
+    await interaction.edit_original_response(content=f'Playlist "{name}", Page {page}:\n' + '\n'.join([f'**{str(i + 1)}. **' + truncate(n) for i, n in enumerate(names)]))
     
 
 @tree.command(name="playlist-show",
