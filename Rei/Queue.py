@@ -1,7 +1,7 @@
 """
 This is the file for a Queue object, which stores information about the Queue in a specific guild
 """
-from config import MAX_SONG_NAME_LENGTH
+from config import MAX_SONG_NAME_LENGTH, MAX_DISPLAY_LENGTH
 from utils import truncate
 
 
@@ -24,7 +24,8 @@ class Queue:
 
     def show(self) -> str:
         """
-        Show the current queue
+        Show the current queue, only limited to MAX_DISPLAY_LENGTH to prevent Discord's 2000 character limit
         """
         return '\n'.join(
-            [f'**{str(i + 1)}.** ' + truncate(s) for i, s in enumerate(self.songs)])
+            [f'**{str(i + 1)}.** ' + truncate(s) for i, s in enumerate(self.songs[:MAX_DISPLAY_LENGTH])]) \
+            + (f'\n... and {len(self.songs) - MAX_DISPLAY_LENGTH} more' if len(self.songs) > MAX_DISPLAY_LENGTH else '')

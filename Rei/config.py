@@ -4,6 +4,7 @@ Configurations file for Rei
 
 TOKEN = "Your token here"
 MAX_SONG_NAME_LENGTH = 100
+MAX_DISPLAY_LENGTH = 15  # Used to limit displays to 15 songs
 DOWNLOAD = False
 
 VOICE_CALL_TIMEOUT = 60

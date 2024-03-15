@@ -561,13 +561,15 @@ async def pl_view(interaction: discord.Interaction, name: str, page: int) -> Non
         for row in reader:
             names.append(row["name"])
 
-    if page > len(names) // 10 + 1:
+    if page > len(names) // MAX_DISPLAY_LENGTH + 1:
         await interaction.edit_original_response(content=f'The page number is invalid!')
         return
     
-    names = names[(page - 1) * 10:page * 10]
+    names = names[(page - 1) * MAX_DISPLAY_LENGTH:page * MAX_DISPLAY_LENGTH]
 
-    await interaction.edit_original_response(content=f'Playlist "{name}", Page {page}:\n' + '\n'.join([f'**{str(i + 1)}. **' + truncate(n) for i, n in enumerate(names)]))
+    await interaction.edit_original_response(
+            content=f'Playlist "{name}", Page {page}:\n' + '\n'.join([f'**{str(i + 1)}. **' + truncate(n) for i, n in enumerate(names)])
+        )
     
 
 @tree.command(name="playlist-show",
