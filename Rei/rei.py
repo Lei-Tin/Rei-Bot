@@ -527,9 +527,9 @@ async def pl_add(interaction: discord.Interaction, name: str, link: str) -> None
     await interaction.edit_original_response(content=f'Successfully added "**{truncate(song)}**" to playlist "**{name}**"')
 
 @tree.command(name="playlist-view",
-              description="Views the playlist with the given name, shows a list of the songs added", 
-              page="The page number (Each page is 10 songs)")
-@app_commands.describe(name='The name of the playlist')
+              description="Views the playlist with the given name, shows a list of the songs added")
+@app_commands.describe(name='The name of the playlist', 
+                       page='The page number (Each page is 10 songs)')
 async def pl_view(interaction: discord.Interaction, name: str, page: int) -> None:
     """
     Checks the songs included in the playlist with the given name
