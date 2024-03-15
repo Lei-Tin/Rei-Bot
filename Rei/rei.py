@@ -75,7 +75,7 @@ if platform.system() == 'Linux':
         raise RuntimeError('Opus failed to load')
 
 # Change the version string every update
-version = 'March 15 4:00 AM'
+version = 'March 15 4:15 AM'
 
 @client.event
 async def on_ready() -> None:
@@ -565,13 +565,13 @@ async def pl_view(interaction: discord.Interaction, name: str, page: int) -> Non
         await interaction.edit_original_response(content=f'The page number is invalid!')
         return
     
-    names = names[(page - 1) * MAX_DISPLAY_LENGTH:page * MAX_DISPLAY_LENGTH]
-
     # Ceiling division
     total_pages = len(names) // MAX_DISPLAY_LENGTH + (len(names) % MAX_DISPLAY_LENGTH != 0) * 1
 
+    names = names[(page - 1) * MAX_DISPLAY_LENGTH:page * MAX_DISPLAY_LENGTH]
+
     await interaction.edit_original_response(
-            content=f'Playlist "{name}", Page {page}/{total_pages}:\n' + '\n'.join([f'**{str(int(page * MAX_DISPLAY_LENGTH) + i + 1)}. **' + truncate(n) for i, n in enumerate(names)])
+            content=f'Playlist "{name}", Page {page}/{total_pages}:\n' + '\n'.join([f'**{str(int((page - 1) * MAX_DISPLAY_LENGTH) + i + 1)}. **' + truncate(n) for i, n in enumerate(names)])
         )
     
 
