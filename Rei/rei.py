@@ -541,6 +541,10 @@ async def pl_view(interaction: discord.Interaction, name: str, page: int) -> Non
     if len(name) > MAX_SONG_NAME_LENGTH:
         await interaction.response.send_message(f"The name of the playlist can only be lesser than {MAX_SONG_NAME_LENGTH} characters!")
         return
+    
+    if page < 1:
+        await interaction.response.send_message("The page number is invalid!")
+        return
 
     guild_id = interaction.guild_id
 
