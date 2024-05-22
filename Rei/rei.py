@@ -352,9 +352,9 @@ async def play(interaction: discord.Interaction, link: str) -> None:
                     content=f'Successfully enqueued "**{truncate(song)}**"!'
                 )
 
-    except yt_dlp.utils.DownloadError:
+    except (yt_dlp.utils.DownloadError, yt_dlp.utils.ExtractorError) as error:
         await interaction.edit_original_response(
-            content='Failed to retrieve information from the link!')
+            content=f'{error} | Failed to retrieve information from the link!')
 
 
 @tree.command(name="queue",
@@ -497,9 +497,9 @@ async def pl_add(interaction: discord.Interaction, name: str, link: str) -> None
             if 'entries' in info_dict:
                 await interaction.edit_original_response(content='Playlist links are not allowed!')
                 return
-        except yt_dlp.utils.DownloadError:
+        except (yt_dlp.utils.DownloadError, yt_dlp.utils.Extra) as error:
             await interaction.edit_original_response(
-            content='Failed to retrieve information from the link!')
+            content=f'{error} | Failed to retrieve information from the link!')
             return
 
     guild_id = interaction.guild_id
@@ -657,29 +657,41 @@ def add_songs_to_queue(guild_id: int, songs: List[str]):
     for i in range(min(5, len(songs))):
         song_name, song_id, youtube_url = songs[i]
 
-        with yt_dlp.YoutubeDL(YDL_OPTS_STREAM) as ydl:
-            # Disable search queries
-            info_dict = ydl.extract_info(youtube_url, download=False)
+        try:
+
+            with yt_dlp.YoutubeDL(YDL_OPTS_STREAM) as ydl:
+                # Disable search queries
+                info_dict = ydl.extract_info(youtube_url, download=False)
+                
+                song = info_dict.get('title', None)
+                id = info_dict.get('id', None)
+                original_url = info_dict.get('original_url', None)
+
+                if not queue.playing:
+                    queue.songs.append(song)
+                    queue.ids.append(id)
+                    queue.youtube_urls.append(original_url)
+                    if not DOWNLOAD:
+                        url = info_dict.get('url', None)
+                        queue.urls.append(url)
+                else:
+                    queue.songs.append(song)
+                    queue.ids.append(id)
+                    queue.youtube_urls.append(original_url)
+
+                    if not DOWNLOAD:
+                        url = info_dict.get('url', None)
+                        queue.urls.append(url)
+        except (yt_dlp.utils.DownloadError, yt_dlp.utils.Extra) as error:
+            logger.error(f'Failed to enqueue song "{song_name}" in guild with ID: {guild_id}')
+            logger.error(f'Error: {error}')
+
+            # Print to the text channel that this song failed
+            asyncio.run_coroutine_threadsafe(
+                queue.text_channel.send(f'{error} | Failed to enqueue song "{song_name}"!'),
+                client.loop)
             
-            song = info_dict.get('title', None)
-            id = info_dict.get('id', None)
-            original_url = info_dict.get('original_url', None)
-
-            if not queue.playing:
-                queue.songs.append(song)
-                queue.ids.append(id)
-                queue.youtube_urls.append(original_url)
-                if not DOWNLOAD:
-                    url = info_dict.get('url', None)
-                    queue.urls.append(url)
-            else:
-                queue.songs.append(song)
-                queue.ids.append(id)
-                queue.youtube_urls.append(original_url)
-
-                if not DOWNLOAD:
-                    url = info_dict.get('url', None)
-                    queue.urls.append(url)
+            continue
 
     task = client.loop.create_task(add_songs_to_queue(guild_id, songs[5:]))
     queue.tasks.append(task)
