@@ -748,34 +748,40 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
 
     song_name, song_id, youtube_url = entries[1]
 
-    with yt_dlp.YoutubeDL(YDL_OPTS_STREAM) as ydl:
-        # Disable search queries
-        info_dict = ydl.extract_info(youtube_url, download=False)
-        
-        song = info_dict.get('title', None)
-        id = info_dict.get('id', None)
-        original_url = info_dict.get('original_url', None)
+    try:
+        with yt_dlp.YoutubeDL(YDL_OPTS_STREAM) as ydl:
+            # Disable search queries
+            info_dict = ydl.extract_info(youtube_url, download=False)
+            
+            song = info_dict.get('title', None)
+            id = info_dict.get('id', None)
+            original_url = info_dict.get('original_url', None)
 
-        queue = q.get(guild_id, None)
-        if queue is None:
-            queue = Queue(voice_channel, text_channel)
-            q[guild_id] = queue
+            queue = q.get(guild_id, None)
+            if queue is None:
+                queue = Queue(voice_channel, text_channel)
+                q[guild_id] = queue
 
-        if not queue.playing:
-            queue.songs.append(song)
-            queue.ids.append(id)
-            queue.youtube_urls.append(original_url)
-            if not DOWNLOAD:
-                url = info_dict.get('url', None)
-                queue.urls.append(url)
-        else:
-            queue.songs.append(song)
-            queue.ids.append(id)
-            queue.youtube_urls.append(original_url)
+            if not queue.playing:
+                queue.songs.append(song)
+                queue.ids.append(id)
+                queue.youtube_urls.append(original_url)
+                if not DOWNLOAD:
+                    url = info_dict.get('url', None)
+                    queue.urls.append(url)
+            else:
+                queue.songs.append(song)
+                queue.ids.append(id)
+                queue.youtube_urls.append(original_url)
 
-            if not DOWNLOAD:
-                url = info_dict.get('url', None)
-                queue.urls.append(url)
+                if not DOWNLOAD:
+                    url = info_dict.get('url', None)
+                    queue.urls.append(url)
+
+    except (yt_dlp.utils.DownloadError, yt_dlp.utils.Extra) as error:
+        await interaction.edit_original_response(
+            content=f'{error} | Failed to retrieve information from the link!')
+        return
     
     try:
         if queue.voice_client is None:
