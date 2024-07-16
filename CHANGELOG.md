@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4] - 2024-07-15
+
+### Changed
+
+- Removed the capability to use `/play` for a YouTube playlist link, replaced it with the capability to play YouTube Mix links. This only enqueues the video currently watching. 
+
 ## [1.3.2] - 2023-11-05
 
 ### Fixed

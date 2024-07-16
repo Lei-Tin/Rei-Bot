@@ -75,7 +75,7 @@ if platform.system() == 'Linux':
         raise RuntimeError('Opus failed to load')
 
 # Change the version string every update
-version = 'May 21 11:30 PM'
+version = 'July 15, 2024 8:00 PM'
 
 @client.event
 async def on_ready() -> None:
@@ -278,14 +278,9 @@ async def play(interaction: discord.Interaction, link: str) -> None:
 
             info_dict = ydl.extract_info(link, download=False)
 
-            # Detection for playlist
-            if 'entries' in info_dict:
-                playlist = True
-            else:
-                playlist = False
-                song = info_dict.get('title', None)
-                id = info_dict.get('id', None)
-                original_url = info_dict.get('original_url', None)
+            song = info_dict.get('title', None)
+            id = info_dict.get('id', None)
+            original_url = info_dict.get('original_url', None)
 
             if DOWNLOAD:
                 ydl.download([link])
@@ -293,22 +288,12 @@ async def play(interaction: discord.Interaction, link: str) -> None:
             queue = q.get(guild_id, None)
             if not queue.playing:
 
-                if not playlist:
-                    queue.songs.append(song)
-                    queue.ids.append(id)
-                    queue.youtube_urls.append(original_url)
-                    if not DOWNLOAD:
-                        url = info_dict.get('url', None)
-                        queue.urls.append(url)
-                else:
-                    for entry in info_dict['entries']:
-                        queue.songs.append(entry['title'])
-                        queue.ids.append(entry['id'])
-                        queue.youtube_urls.append(entry['original_url'])
-
-                        if not DOWNLOAD:
-                            url = entry.get('url', None)
-                            queue.urls.append(url)
+                queue.songs.append(song)
+                queue.ids.append(id)
+                queue.youtube_urls.append(original_url)
+                if not DOWNLOAD:
+                    url = info_dict.get('url', None)
+                    queue.urls.append(url)
 
                 try:
                     if queue.voice_client is None:
@@ -323,34 +308,18 @@ async def play(interaction: discord.Interaction, link: str) -> None:
                     await interaction.edit_original_response(content='Failed to play the music!')
                     return
             else:
-                if not playlist:
-                    queue.songs.append(song)
-                    queue.ids.append(id)
-                    queue.youtube_urls.append(original_url)
+                queue.songs.append(song)
+                queue.ids.append(id)
+                queue.youtube_urls.append(original_url)
 
-                    if not DOWNLOAD:
-                        url = info_dict.get('url', None)
-                        queue.urls.append(url)
-                else:
-                    for entry in info_dict['entries']:
-                        queue.songs.append(entry['title'])
-                        queue.ids.append(entry['id'])
-                        queue.youtube_urls.append(entry['original_url'])
-
-                        if not DOWNLOAD:
-                            url = entry.get('url', None)
-                            queue.urls.append(url)
-
-            if playlist:
-                logger.info(f'Successfully enqueue a playlist ({len(info_dict["entries"])} songs) for guild with ID: {guild_id}')
-                await interaction.edit_original_response(
-                    content=f'Successfully enqueued {len(info_dict["entries"])} songs!'
-                )
-            else:
-                logger.info(f'Successfully enqueue a song for guild with ID: {guild_id}')
-                await interaction.edit_original_response(
-                    content=f'Successfully enqueued "**{truncate(song)}**"!'
-                )
+                if not DOWNLOAD:
+                    url = info_dict.get('url', None)
+                    queue.urls.append(url)
+                    
+            logger.info(f'Successfully enqueue a song for guild with ID: {guild_id}')
+            await interaction.edit_original_response(
+                content=f'Successfully enqueued "**{truncate(song)}**"!'
+            )
 
     except (yt_dlp.utils.DownloadError, yt_dlp.utils.ExtractorError) as error:
         await interaction.edit_original_response(
@@ -514,7 +483,7 @@ async def pl_add(interaction: discord.Interaction, name: str, link: str) -> None
     original_url = info_dict.get('original_url', None)
 
     if os.path.isfile(os.path.join(*path)):
-        # If the file exists with name.txt
+        # If the file exists with name.csv, append to it
         with open(os.path.join(*path), 'a+', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([song, id, original_url])
@@ -660,7 +629,6 @@ def add_songs_to_queue(guild_id: int, songs: List[str]):
         try:
 
             with yt_dlp.YoutubeDL(YDL_OPTS_STREAM) as ydl:
-                # Disable search queries
                 info_dict = ydl.extract_info(youtube_url, download=False)
                 
                 song = info_dict.get('title', None)
