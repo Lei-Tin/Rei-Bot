@@ -87,13 +87,6 @@ async def on_ready() -> None:
     logger.info('Rei Bot is ready!')
     logger.info(f'Version: {version}')
 
-    # Run a dry run for obtaining OAuth2 Device Token
-    logger.info('Waiting for OAuth2 Authentication...')
-    with yt_dlp.YoutubeDL(YDL_OPTS_STREAM) as ydl:
-        info_dict = ydl.extract_info("https://www.youtube.com/watch?v=dQw4w9WgXcQ", download=False)
-
-    logger.info('OAuth2 Authenticated!')
-
 
 @client.event
 async def on_voice_state_update(member: discord.Member,
@@ -783,4 +776,11 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
 
 
 if __name__ == '__main__':
+    # Run a dry run for obtaining OAuth2 Device Token
+    logger.info('Waiting for OAuth2 Authentication...')
+    with yt_dlp.YoutubeDL(YDL_OPTS_STREAM) as ydl:
+        info_dict = ydl.extract_info("https://www.youtube.com/watch?v=dQw4w9WgXcQ", download=False)
+
+    logger.info('OAuth2 Authenticated!')
+
     client.run(TOKEN)
