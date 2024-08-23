@@ -13,6 +13,11 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+    - name: Export cookies
+      run:
+        mkdir ./Rei
+        echo "${{ secrets.COOKIES }}" > ./Rei/cookies
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
@@ -30,4 +35,3 @@ jobs:
         file: ./Dockerfile
         build-args: |
           token=${{ secrets.DISCORD_TOKEN }}
-          cookies="${{ secrets.COOKIES }}"
