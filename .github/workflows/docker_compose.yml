@@ -15,7 +15,6 @@ jobs:
 
     - name: Export cookies
       run:
-        mkdir ./Rei
         echo "${{ secrets.COOKIES }}" > ./Rei/cookies
 
     - name: Set up Docker Buildx
