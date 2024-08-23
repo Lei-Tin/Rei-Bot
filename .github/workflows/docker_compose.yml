@@ -28,6 +28,6 @@ jobs:
         push: true
         tags: ${{ secrets.DOCKERHUB_USERNAME }}/reibot:latest
         file: ./Dockerfile
-        build-args: |
+        build-args: |-
           token=${{ secrets.DISCORD_TOKEN }}
           cookies=${{ secrets.COOKIES }}

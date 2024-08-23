@@ -43,9 +43,6 @@ if os.path.isfile(os.path.join(FILE_DIR, 'discord_token')):
         if content != '':
             TOKEN = content
 
-print(TOKEN)
-            
-
 # TEST_GUILD = discord.Object(id=1135123159671119955)
 
 # If you want to use TEST_GUILD, be sure to add it to the end of the tree command decorators
