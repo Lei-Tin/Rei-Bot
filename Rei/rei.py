@@ -42,6 +42,8 @@ if os.path.isfile(os.path.join(FILE_DIR, 'discord_token')):
         content = f.readline().strip()
         if content != '':
             TOKEN = content
+
+print(TOKEN)
             
 
 # TEST_GUILD = discord.Object(id=1135123159671119955)
