@@ -74,7 +74,7 @@ if platform.system() == 'Linux':
         raise RuntimeError('Opus failed to load')
 
 # Change the version string every update
-version = 'August 22, 2024 11:00 PM'
+version = 'October 15, 2024 7:30 PM'
 
 @client.event
 async def on_ready() -> None:
@@ -465,7 +465,7 @@ async def pl_add(interaction: discord.Interaction, name: str, link: str) -> None
             if 'entries' in info_dict:
                 await interaction.edit_original_response(content='Playlist links are not allowed!')
                 return
-        except (yt_dlp.utils.DownloadError, yt_dlp.utils.Extra) as error:
+        except (yt_dlp.utils.DownloadError, yt_dlp.utils.ExtractorError, yt_dlp.utils.YoutubeDLError) as error:
             await interaction.edit_original_response(
             content=f'{error} | Failed to retrieve information from the link!')
             return
