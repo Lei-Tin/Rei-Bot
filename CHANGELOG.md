@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.1] - 2024-11-18
+
+### Changed
+
+- Instead of OAuth's temporary solution to YouTube's link issue, use cookies instead. 
+
 ## [1.4] - 2024-07-15
 
 ### Changed

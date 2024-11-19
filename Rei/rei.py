@@ -74,7 +74,7 @@ if platform.system() == 'Linux':
         raise RuntimeError('Opus failed to load')
 
 # Change the version string every update
-version = 'October 15, 2024 7:30 PM'
+version = 'November 18, 2024 10:30 PM'
 
 @client.event
 async def on_ready() -> None:
@@ -776,11 +776,13 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
 
 
 if __name__ == '__main__':
-    # Run a dry run for obtaining OAuth2 Device Token
-    logger.info('Waiting for OAuth2 Authentication...')
-    with yt_dlp.YoutubeDL(YDL_OPTS_STREAM) as ydl:
-        info_dict = ydl.extract_info("https://www.youtube.com/watch?v=dQw4w9WgXcQ", download=False)
 
-    logger.info('OAuth2 Authenticated!')
+    # OAuth is no longer working (as of November 2024)
+
+    # Run a dry run for obtaining OAuth2 Device Token
+    # logger.info('Waiting for OAuth2 Authentication...')
+    # with yt_dlp.YoutubeDL(YDL_OPTS_STREAM) as ydl:
+    #     info_dict = ydl.extract_info("https://www.youtube.com/watch?v=dQw4w9WgXcQ", download=False)
+    # logger.info('OAuth2 Authenticated!')
 
     client.run(TOKEN)
