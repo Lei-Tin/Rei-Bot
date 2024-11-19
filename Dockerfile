@@ -20,4 +20,6 @@ ARG token=""
 
 RUN echo "${token}" >> ./Rei/discord_token
 
+RUN echo "${cookies}" >> ./Rei/cookies
+
 CMD [ "python", "./Rei/rei.py"]
