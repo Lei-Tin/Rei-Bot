@@ -17,9 +17,9 @@ RUN apk add libffi-dev
 RUN echo "Successfully setup the environment!"
 
 ARG token=""
+ARG cookies=""
 
 RUN echo "${token}" >> ./Rei/discord_token
-
 RUN echo "${cookies}" >> ./Rei/cookies
 
 CMD [ "python", "./Rei/rei.py"]
