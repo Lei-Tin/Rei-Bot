@@ -18,8 +18,6 @@ FFMPEG_OPTIONS = {
 YDL_OPTS_STREAM = {
     'format': 'bestaudio/best',
     'noplaylist': True, # Prevents downloading of playlists
-    'username': 'oauth2',
-    'password': '',
     'no_warnings': True,
     'cookiefile': './Rei/cookies.txt',
 }
