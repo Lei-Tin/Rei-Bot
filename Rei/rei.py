@@ -649,7 +649,7 @@ def add_songs_to_queue(guild_id: int, songs: List[str]):
                     if not DOWNLOAD:
                         url = info_dict.get('url', None)
                         queue.urls.append(url)
-        except (yt_dlp.utils.DownloadError, yt_dlp.utils.Extra) as error:
+        except (yt_dlp.utils.DownloadError, yt_dlp.utils.ExtractorError) as error:
             logger.error(f'Failed to enqueue song "{song_name}" in guild with ID: {guild_id}')
             logger.error(f'Error: {error}')
 
@@ -745,7 +745,7 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
                     url = info_dict.get('url', None)
                     queue.urls.append(url)
 
-    except (yt_dlp.utils.DownloadError, yt_dlp.utils.Extra) as error:
+    except (yt_dlp.utils.DownloadError, yt_dlp.utils.ExtractorError) as error:
         await interaction.edit_original_response(
             content=f'{error} | Failed to retrieve information from the link!')
         return
