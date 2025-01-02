@@ -5,7 +5,10 @@ COPY . .
 
 RUN apk add build-base
 
-RUN pip install -r requirements.txt
+RUN pip install -U pip
+
+# So that this installs the latest versions of the yt-dlp package
+RUN pip install -U -r requirements.txt
 
 # OAuth login method is no longer working (as of November 2024)
 # Install OAuth2 plugin
