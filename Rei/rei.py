@@ -74,7 +74,7 @@ if platform.system() == 'Linux':
         raise RuntimeError('Opus failed to load')
 
 # Change the version string every update
-version = 'January 1, 2025 11:30 PM'
+version = 'January 15, 2025 10:00 PM'
 
 @client.event
 async def on_ready() -> None:
