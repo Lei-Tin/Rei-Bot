@@ -1,3 +1,3 @@
-discord.py
+discord.py[voice] @ git+https://github.com/rapptz/discord.py
 yt-dlp
 PyNaCl
