@@ -5,6 +5,9 @@ COPY . .
 
 RUN apk add build-base
 
+# Adding git to install discord.py from github source instead of pypi
+RUN apk add git
+
 RUN pip install -U pip
 
 # So that this installs the latest versions of the yt-dlp package
