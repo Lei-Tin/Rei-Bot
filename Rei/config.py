@@ -20,5 +20,5 @@ YDL_OPTS_STREAM = {
     'noplaylist': True, # Prevents downloading of playlists
     'no_warnings': True,
     'cookiefile': './Rei/cookies.txt', 
-    'extractor_args': {'youtube:player_client': 'web_safari'},
+    'extractor_args': {'youtube:player_client': 'tv,web,web_safari'},
 }
