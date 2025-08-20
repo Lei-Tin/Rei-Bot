@@ -1,3 +1,5 @@
+hatchling
+wheel
 discord.py[voice] @ git+https://github.com/rapptz/discord.py
-yt-dlp
+yt-dlp[default] @ https://github.com/yt-dlp/yt-dlp/archive/master.tar.gz
 PyNaCl
