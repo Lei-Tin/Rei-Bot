@@ -30,4 +30,5 @@ jobs:
         file: ./Dockerfile
         build-args: |
           "token=${{ secrets.DISCORD_TOKEN }}"
-          "cookies=${{ secrets.COOKIES }}"
+          "yt_cookies=${{ secrets.YT_COOKIES }}"
+          "bilibili_cookies=${{ secrets.BILIBILI_COOKIES }}"

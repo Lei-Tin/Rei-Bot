@@ -24,10 +24,12 @@ RUN apk add libffi-dev
 RUN echo "Successfully setup the environment!"
 
 ARG token=""
-ARG cookies=""
+ARG yt_cookies=""
+ARG bilibili_cookies=""
 
 # Using cookies now to authenticate
 RUN echo "${token}" >> ./Rei/discord_token
-RUN echo "${cookies}" >> ./Rei/cookies.txt
+RUN echo "${yt_cookies}" >> ./Rei/cookies.txt
+RUN echo "${bilibili_cookies}" >> ./Rei/cookies.txt
 
 CMD [ "python", "./Rei/rei.py"]
