@@ -4,6 +4,7 @@ WORKDIR /app
 COPY . .
 
 RUN apt-get update && apt-get install -y build-essential libffi-dev git ffmpeg curl
+RUN apt-get install -y unzip
 RUN apt-get install -y opus-tools libopus0 libogg0
 
 # Adding git to install discord.py from github source instead of pypi
