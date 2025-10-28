@@ -1,4 +1,4 @@
-FROM ubuntu/python:3.12-24.04_stable
+FROM python:3.12-slim
 
 WORKDIR /app
 COPY . .
