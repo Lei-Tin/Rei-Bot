@@ -3,7 +3,8 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY . .
 
-RUN apt-get update && apt-get install -y build-essential libffi-dev git ffmpeg opus curl
+RUN apt-get update && apt-get install -y build-essential libffi-dev git ffmpeg curl
+RUN apt-get install -y opus-tools libopus0 libogg0
 
 # Adding git to install discord.py from github source instead of pypi
 RUN apt-get install -y git
