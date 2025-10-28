@@ -5,6 +5,8 @@ The main file for the bot
 version = 'Oct 28, 2025 12:35 AM'
 
 import asyncio
+import ctypes
+from ctypes.util import find_library
 
 from typing import Union, List, Callable, Coroutine
 
@@ -69,7 +71,7 @@ if platform.system() == 'Darwin':
         raise RuntimeError('Opus failed to load')
 
 if platform.system() == 'Linux':
-    discord.opus.load_opus('/usr/lib/libopus.so.0.9.0')
+    discord.opus.load_opus(find_library('opus'))
     if not discord.opus.is_loaded():
         raise RuntimeError('Opus failed to load')
 
