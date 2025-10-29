@@ -12,7 +12,7 @@ VOICE_CALL_TIMEOUT = 60
 
 FFMPEG_OPTIONS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 10',
-    'options': '-vn'
+    'options': '-vn -http_persistent 0', 
 }
 
 YDL_OPTS_STREAM = {
