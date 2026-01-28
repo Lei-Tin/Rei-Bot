@@ -21,5 +21,5 @@ YDL_OPTS_STREAM = {
     'no_warnings': True,
     'cookiefile': './Rei/cookies.txt', 
     'extractor_args': {'youtube:player_client': 'default,ios,web_safari,web,tv'},
-    'js-runtimes': 'deno:/root/.deno/bin'
+    'js_runtimes': 'deno:/root/.deno/bin'
 }

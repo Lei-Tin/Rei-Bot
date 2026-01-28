@@ -2,7 +2,7 @@
 The main file for the bot
 """
 # Change the version string every update
-version = 'Oct 28, 2025 12:35 AM'
+version = 'Jan 28, 2026 15:35'
 
 import asyncio
 import ctypes
