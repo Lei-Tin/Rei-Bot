@@ -11,7 +11,7 @@ DOWNLOAD = False
 VOICE_CALL_TIMEOUT = 60
 
 FFMPEG_OPTIONS = {
-    'before_options': ' -http_persistent 0 -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 10',
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 10',
     'options': '-vn', 
 }
 
