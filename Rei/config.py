@@ -20,5 +20,6 @@ YDL_OPTS_STREAM = {
     'noplaylist': True, # Prevents downloading of playlists
     'no_warnings': True,
     'cookiefile': './Rei/cookies.txt', 
-    'extractor_args': {'youtube:player_client': 'default,ios,-android_sdkless'},
+    'extractor_args': {'youtube:player_client': 'default,ios,web_safari,web,tv'},
+    'js-runtimes': 'deno:/root/.deno/bin'
 }
