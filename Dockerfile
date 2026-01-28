@@ -12,6 +12,7 @@ RUN apt-get install -y git
 
 # Install Deno for yt-dlp
 RUN curl -fsSL https://deno.land/install.sh | sh
+RUN echo 'export PATH="~/.deno/bin:$PATH"' >> ~/.bashrc
 
 RUN pip install -U pip
 
