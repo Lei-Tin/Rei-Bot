@@ -20,7 +20,7 @@ RUN pip install -U pip
 RUN pip install -U -r requirements.txt
 
 # Install yt-dlp nightly build
-RUN pip install -U --pre "yt-dlp[default]"
+RUN pip install -U "yt-dlp[default]"
 
 # OAuth login method is no longer working (as of November 2024)
 # Install OAuth2 plugin

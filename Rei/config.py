@@ -19,6 +19,6 @@ YDL_OPTS_STREAM = {
     'format': 'bestaudio/best',
     'noplaylist': True, # Prevents downloading of playlists
     'no_warnings': True,
-    # 'cookiefile': './Rei/cookies.txt', # Remove cookies
+    'cookiefile': './Rei/cookies.txt', # Remove cookies
     'js_runtimes': {'deno': {'path': '/root/.deno/bin'}},
 }
