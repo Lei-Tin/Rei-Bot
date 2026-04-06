@@ -36,6 +36,6 @@ ARG bilibili_cookies=""
 # Using cookies now to authenticate
 RUN echo "${token}" >> ./Rei/discord_token
 RUN echo "${yt_cookies}" >> ./Rei/cookies.txt
-RUN echo "${bilibili_cookies}" >> ./Rei/cookies.txt
+RUN echo "${bilibili_cookies}" >> ./Rei/bilibili_cookies.txt
 
 CMD [ "python", "./Rei/rei.py"]
