@@ -7,8 +7,9 @@ RUN apt-get update && apt-get install -y build-essential libffi-dev git ffmpeg c
 RUN apt-get install -y unzip
 RUN apt-get install -y opus-tools libopus0 libogg0
 
-# Adding git to install discord.py from github source instead of pypi
+# Adding some essentials for tweaking
 RUN apt-get install -y git
+RUN apt-get install -y vim
 
 # Install Deno for yt-dlp
 RUN curl -fsSL https://deno.land/install.sh | sh
