@@ -13,6 +13,8 @@ RUN pip install -U pip
 # So that this installs the latest versions of the yt-dlp package
 RUN pip install -U -r requirements.txt
 
+RUN pip install curl_cffi --upgrade
+
 # OAuth login method is no longer working (as of November 2024)
 # Install OAuth2 plugin
 # RUN python3 -m pip install -U https://github.com/coletdjnz/yt-dlp-youtube-oauth2/archive/refs/heads/master.zip
