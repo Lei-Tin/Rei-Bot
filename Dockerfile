@@ -25,6 +25,8 @@ RUN pip install curl_cffi --upgrade
 # Install yt-dlp nightly build
 RUN pip install -U "yt-dlp[default]"
 
+RUN pip install -U discord.py[voice]
+
 # OAuth login method is no longer working (as of November 2024)
 # Install OAuth2 plugin
 # RUN python3 -m pip install -U https://github.com/coletdjnz/yt-dlp-youtube-oauth2/archive/refs/heads/master.zip

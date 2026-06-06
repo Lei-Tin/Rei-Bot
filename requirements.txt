@@ -1,4 +1,3 @@
 hatchling
 wheel
-discord.py[voice] @ git+https://github.com/rapptz/discord.py
 PyNaCl
