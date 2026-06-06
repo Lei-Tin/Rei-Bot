@@ -12,7 +12,7 @@ VOICE_CALL_TIMEOUT = 60
 
 FFMPEG_OPTIONS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 10',
-    'options': '-vn'
+    'options': '-vn', 
 }
 
 YDL_OPTS_STREAM = {
@@ -20,5 +20,5 @@ YDL_OPTS_STREAM = {
     'noplaylist': True, # Prevents downloading of playlists
     'no_warnings': True,
     'cookiefile': './Rei/cookies.txt', 
-    'extractor_args': {'youtube:player_client': 'web_safari,web,tv'},
+    'js_runtimes': {'deno': {'path': '/root/.deno/bin'}},
 }

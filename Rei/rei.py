@@ -1,7 +1,12 @@
 """
 The main file for the bot
 """
+# Change the version string every update
+version = 'Apr 6, 2026 17:10'
+
 import asyncio
+import ctypes
+from ctypes.util import find_library
 
 from typing import Union, List, Callable, Coroutine
 
@@ -60,21 +65,15 @@ tree = app_commands.CommandTree(client)
 # Mapping from guild id to queue and other information
 q = {}  # Maps from int to Queue
 
-# My opus library is in homebrew as I'm in M1 Mac
-# You can comment this out in Windows, I think
-
 if platform.system() == 'Darwin':
     discord.opus.load_opus('/opt/homebrew/Cellar/opus/1.4/lib/libopus.0.dylib')
     if not discord.opus.is_loaded():
         raise RuntimeError('Opus failed to load')
 
 if platform.system() == 'Linux':
-    discord.opus.load_opus('/usr/lib/libopus.so.0.9.0')
+    discord.opus.load_opus(find_library('opus'))
     if not discord.opus.is_loaded():
         raise RuntimeError('Opus failed to load')
-
-# Change the version string every update
-version = 'April 4, 2025 09:00 PM'
 
 @client.event
 async def on_ready() -> None:
