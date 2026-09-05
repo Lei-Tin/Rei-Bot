@@ -8,7 +8,10 @@ RUN curl -fsSL https://deno.land/install.sh | sh -s v2.8.2
 ENV PATH="/root/.deno/bin:${PATH}"
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
-    'yt-dlp[default]==2026.3.17' 'discord.py[voice]==2.7.1' 'curl_cffi==0.15.0'
+    'discord.py[voice]==2.7.1' 'curl_cffi==0.15.0'
+# YouTube changes frequently: refresh the stable extractor on each CI build.
+# CI records the installed version and deploys the exact tested image digest.
+RUN pip install --no-cache-dir --upgrade 'yt-dlp[default]'
 COPY Rei ./Rei
 COPY deploy ./deploy
 # Credentials are provided by Azure only when the container starts.

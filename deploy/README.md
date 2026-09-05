@@ -43,7 +43,10 @@ Discord debug logs in workflow output. Historical DockerHub images from the
 previous build process may still contain older credentials; this workflow does
 not delete existing registry images or rotate the Discord token automatically.
 
-The main application libraries are pinned to the versions observed before the
-migration to avoid mixing a credential/deployment fix with a library upgrade.
+yt-dlp and its matching default dependencies are updated to the latest stable
+release on each clean CI build because YouTube extraction changes frequently.
+CI prints the installed version and accepts a deployment only after the media
+check passes. discord.py and curl_cffi retain the previously verified versions.
 The Python base tag, OS packages and transitive dependencies can still change;
-the deployed digest identifies the exact tested image.
+the deployed digest identifies the exact tested image. When building locally
+with a persistent Docker cache, use `--no-cache` to refresh yt-dlp.
