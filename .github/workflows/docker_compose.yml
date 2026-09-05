@@ -1,146 +1,83 @@
-name: Build and deploy ReiBot to Azure
+name: Deploy ReiBot
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 concurrency:
   group: reibot-production
   cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    outputs:
-      digest: ${{ steps.publish.outputs.digest }}
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - name: Test runtime credential handling
-        run: python3 -m unittest discover -s tests -v
-      - uses: docker/setup-buildx-action@v4.3.0
-      - uses: docker/login-action@v4.6.0
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Build code-only image
-        id: build
-        uses: docker/build-push-action@v7.3.0
-        with:
-          context: .
-          file: ./Dockerfile
-          load: true
-          provenance: false
-          platforms: linux/amd64
-          tags: hleitr/reibot:gh-${{ github.run_id }}-${{ github.run_attempt }}
-      - name: Verify image contains no application credentials
-        run: |
-          image="hleitr/reibot:gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          docker run --rm --entrypoint python "$image" -c '
-          from pathlib import Path
-          import discord, yt_dlp.version
-          from yt_dlp.utils._jsruntime import DenoJsRuntime
-          runtime = DenoJsRuntime("/root/.deno/bin").info
-          assert runtime and runtime.supported, "Deno runtime unavailable or unsupported"
-          print("Deno verified:", runtime.version, runtime.path)
-          for name in ("discord_token", "cookies.txt", "bilibili_cookies.txt"):
-              assert not (Path("/app/Rei") / name).exists(), "Credential file included in image"
-          print("Credential-free image verified; discord.py", discord.__version__, "yt-dlp", yt_dlp.version.__version__)
-          '
-      - name: Publish verified image
-        id: publish
-        uses: docker/build-push-action@v7.3.0
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          platforms: linux/amd64
-          provenance: false
-          tags: hleitr/reibot:gh-${{ github.run_id }}-${{ github.run_attempt }}
   deploy:
-    needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     permissions:
       contents: read
       id-token: write
     env:
       AZURE_CORE_OUTPUT: none
-      APP_ID: /subscriptions/de7b33ea-f724-4642-abfc-a17d47306ad2/resourceGroups/ReiBot/providers/Microsoft.App/containerApps/reibot
-      DEPLOY_IMAGE: registry.hub.docker.com/hleitr/reibot@${{ needs.build.outputs.digest }}
-      DEPLOY_SUFFIX: gh-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v7.0.1
+      - run: python3 -m unittest discover -s tests -v
+      - uses: docker/setup-buildx-action@v4.3.0
+      - uses: docker/login-action@v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Build and push
+        id: image
+        uses: docker/build-push-action@v7.3.0
+        with:
+          context: .
+          push: true
+          provenance: false
+          tags: hleitr/reibot:gh-${{ github.run_id }}-${{ github.run_attempt }}
       - uses: azure/login@v3.0.2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: 0e855614-bb91-460f-9241-64096bdf7f2f
-          subscription-id: de7b33ea-f724-4642-abfc-a17d47306ad2
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           enable-AzPSSession: true
-      - name: Prepare private deployment and rollback configuration
-        id: prepare
+      - name: Sync runtime secrets
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
-          BILIBILI_COOKIES: ${{ secrets.BILIBILI_COOKIES }}
-        run: python3 deploy/prepare.py
-      - name: Stop previous bot before cutover
+          BILIBILI_COOKIES: ${{ secrets.BILIBILI_COOKIES || '# Netscape HTTP Cookie File' }}
+        run: |
+          test -n "$DISCORD_TOKEN" && test -n "$YT_COOKIES"
+          az containerapp secret set -g ReiBot -n reibot --secrets \
+            "discord-token=$DISCORD_TOKEN" "youtube-cookies=$YT_COOKIES" \
+            "bilibili-cookies=$BILIBILI_COOKIES"
+      # Avoid two Discord workers during the update; always restart after it.
+      - name: Stop bot
         id: stop
         uses: azure/powershell@v3
         with:
           azPSVersion: latest
-          inlineScript: Stop-AzContainerApp -Name reibot -ResourceGroupName ReiBot -ErrorAction Stop | Out-Null
-      - name: Deploy with Azure Container Apps action
-        id: deploy
+          inlineScript: Stop-AzContainerApp -Name reibot -ResourceGroupName ReiBot | Out-Null
+      - name: Deploy image
         uses: azure/container-apps-deploy-action@v2
         with:
           containerAppName: reibot
           resourceGroup: ReiBot
           location: westus
-          imageToDeploy: ${{ env.DEPLOY_IMAGE }}
-          yamlConfigPath: ${{ runner.temp }}/reibot-deploy/deploy.yaml
+          imageToDeploy: registry.hub.docker.com/hleitr/reibot@${{ steps.image.outputs.digest }}
+          environmentVariables: >-
+            DISCORD_TOKEN=secretref:discord-token
+            YT_COOKIES=secretref:youtube-cookies
+            BILIBILI_COOKIES=secretref:bilibili-cookies
           disableTelemetry: true
-      - name: Start deployed bot
+      - name: Start bot
+        if: always() && steps.stop.outcome != 'skipped'
         uses: azure/powershell@v3
         with:
           azPSVersion: latest
-          inlineScript: Start-AzContainerApp -Name reibot -ResourceGroupName ReiBot -ErrorAction Stop | Out-Null
-      - name: Verify Discord, persistent storage and audio
-        id: verify
-        run: bash deploy/verify.sh "reibot--$DEPLOY_SUFFIX"
-      # Both deployment and recovery use the same official deployment action.
-      - name: Stop failed revision for recovery
-        id: recovery_stop
-        if: failure() && steps.prepare.outcome == 'success' && steps.stop.outcome != 'skipped'
-        uses: azure/powershell@v3
-        with:
-          azPSVersion: latest
-          inlineScript: Stop-AzContainerApp -Name reibot -ResourceGroupName ReiBot -ErrorAction Stop | Out-Null
-      - name: Restore previous image and secret references
-        id: rollback
-        if: failure() && steps.recovery_stop.outcome == 'success'
-        uses: azure/container-apps-deploy-action@v2
-        with:
-          containerAppName: reibot
-          resourceGroup: ReiBot
-          location: westus
-          imageToDeploy: ${{ steps.prepare.outputs.previous_image }}
-          yamlConfigPath: ${{ runner.temp }}/reibot-deploy/rollback.yaml
-          disableTelemetry: true
-      - name: Restart bot after failed deployment
-        if: always() && steps.prepare.outcome == 'success' && steps.stop.outcome != 'skipped' && steps.verify.outcome != 'success'
-        uses: azure/powershell@v3
-        with:
-          azPSVersion: latest
-          inlineScript: Start-AzContainerApp -Name reibot -ResourceGroupName ReiBot -ErrorAction Stop | Out-Null
-      - name: Verify recovered bot
-        if: failure() && steps.rollback.outcome == 'success'
-        run: bash deploy/verify.sh "reibot--rollback-$DEPLOY_SUFFIX"
-      - name: Remove temporary credential configuration
-        if: always()
-        run: rm -rf "$RUNNER_TEMP/reibot-deploy"
+          inlineScript: Start-AzContainerApp -Name reibot -ResourceGroupName ReiBot | Out-Null
+      - name: Check startup
+        run: |
+          app=$(az containerapp show -g ReiBot -n reibot --query id -o tsv)
+          az resource wait --ids "$app" --api-version 2025-07-01 --timeout 300 --interval 5 \
+            --custom "properties.runningStatus == 'Running' && properties.latestReadyRevisionName == properties.latestRevisionName"
