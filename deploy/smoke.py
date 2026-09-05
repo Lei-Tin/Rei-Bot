@@ -1,5 +1,7 @@
 """Run inside the deployed container. Print only non-sensitive check results."""
 import copy
+import dataclasses
+import importlib.metadata
 import os
 import json
 import re
@@ -14,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, "/app/Rei")
 
 
-def safe_media_error(message, secret_values):
+def redact_media_text(message, secret_values):
     """Redact runtime credentials and URLs before surfacing a media error."""
     variants = set()
     for value in secret_values:
@@ -24,13 +26,54 @@ def safe_media_error(message, secret_values):
         message = message.replace(value, '[redacted]')
     message = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', message)
     message = re.sub(r'https?://\S+', '[url]', message)
-    return ' '.join(message.split())[:600]
+    return message
+
+
+def safe_media_error(message, secret_values):
+    return ' '.join(redact_media_text(message, secret_values).split())[:600]
+
+
+def runtime_report(options):
+    from yt_dlp.utils._jsruntime import DenoJsRuntime
+    path = options.get('js_runtimes', {}).get('deno', {}).get('path')
+    info = DenoJsRuntime(path).info
+    detected = DenoJsRuntime().info
+    report = {'deno_on_path': shutil.which('deno'),
+              'configured_deno': dataclasses.asdict(info) if info else None,
+              'cli_deno': dataclasses.asdict(detected) if detected else None}
+    for name in ('yt-dlp', 'yt-dlp-ejs'):
+        try: report[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError: report[name] = None
+    print('REIBOT_RUNTIME ' + json.dumps(report), flush=True)
+
+
+def cli_diagnostic(cookie, url, values):
+    # Reproduce the user's CLI invocation, without downloading the whole video.
+    args = [sys.executable, '-m', 'yt_dlp', '--verbose', '--skip-download',
+            '--no-playlist', '--socket-timeout', '15', '--retries', '0',
+            '--extractor-retries', '0', '--cookies', str(cookie), url]
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, timeout=90)
+        output = result.stdout + result.stderr
+        code = result.returncode
+    except subprocess.TimeoutExpired as exc:
+        output = (exc.stdout or b'') + (exc.stderr or b'')
+        if isinstance(output, bytes): output = output.decode(errors='replace')
+        code = 'timeout'
+    # The CLI can update its temporary cookie jar; redact those values too.
+    if cookie.exists():
+        values += [row.split('\t')[-1] for row in cookie.read_text().splitlines()
+                   if len(row.split('\t')) == 7]
+    print('REIBOT_DIAGNOSTIC CLI exit=' + str(code), flush=True)
+    for line in redact_media_text(output, values).splitlines():
+        print('REIBOT_DIAGNOSTIC ' + line, flush=True)
 
 
 def main():
     import config
     import yt_dlp
 
+    runtime_report(config.YDL_OPTS_STREAM)
     deadline = time.monotonic() + 60
     while not Path("/tmp/reibot-ready").exists() and time.monotonic() < deadline:
         time.sleep(2)
@@ -71,6 +114,8 @@ def main():
                 if token.exists():
                     values.append(token.read_text().strip())
                 print('REIBOT_MEDIA_ERROR ' + safe_media_error(str(exc), values), flush=True)
+                shutil.copyfile('/app/Rei/cookies.txt', cookie)
+                cli_diagnostic(cookie, sys.argv[1], values)
                 raise
         stream = result.get("url")
         if not stream:

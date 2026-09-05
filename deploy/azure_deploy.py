@@ -94,7 +94,7 @@ def smoke(revision, url):
                                 'python /app/deploy/smoke.py ' + url],
                                stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
     os.close(slave)
-    output = bytearray(); deadline = time.monotonic() + 210
+    output = bytearray(); deadline = time.monotonic() + 300
     try:
         while time.monotonic() < deadline:
             readable, _, _ = select.select([master], [], [], 1)
@@ -108,6 +108,10 @@ def smoke(revision, url):
                 output.extend(chunk)
             elif process.poll() is not None:
                 break
+        for line in output.decode(errors='replace').splitlines():
+            match = re.search(r'REIBOT_(?:RUNTIME|DIAGNOSTIC) .*', line)
+            if match:
+                print(match.group(0), flush=True)
         if b'REIBOT_SMOKE_OK' not in output:
             raise RuntimeError('Deployed smoke check failed: ' + smoke_failure(output))
         print('Storage, Discord readiness and remote audio decoding verified.', flush=True)

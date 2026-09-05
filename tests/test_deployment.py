@@ -9,7 +9,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from deploy.smoke import safe_media_error
+from deploy.smoke import safe_media_error, redact_media_text
 from deploy.entrypoint import write_secrets
 from deploy import azure_deploy as deployment
 
@@ -103,6 +103,14 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(calls.count(('post', '/stop')), 1)
         self.assertEqual(calls[-1], ('post', '/start'))
         self.assertEqual(current['properties']['runningStatus'], 'Running')
+
+    def test_verbose_log_redaction_preserves_error_context(self):
+        result = redact_media_text('debug\nError: cookie=private-cookie\nTraceback\nhttps://example.test/signed?token=secret',
+                                   ['private-cookie'])
+        self.assertIn('debug\nError:', result)
+        self.assertIn('\nTraceback\n', result)
+        self.assertNotIn('private-cookie', result)
+        self.assertNotIn('token=secret', result)
 
     def test_media_error_redacts_cookies_token_and_signed_urls(self):
         message = 'ERROR: failed for fake-cookie and fake-token at https://example.test/audio?signature=private\nretry'

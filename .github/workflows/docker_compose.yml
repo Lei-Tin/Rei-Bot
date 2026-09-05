@@ -42,6 +42,10 @@ jobs:
           docker run --rm --entrypoint python "$image" -c '
           from pathlib import Path
           import discord, yt_dlp.version
+          from yt_dlp.utils._jsruntime import DenoJsRuntime
+          runtime = DenoJsRuntime("/root/.deno/bin").info
+          assert runtime and runtime.supported, "Deno runtime unavailable or unsupported"
+          print("Deno verified:", runtime.version, runtime.path)
           for name in ("discord_token", "cookies.txt", "bilibili_cookies.txt"):
               assert not (Path("/app/Rei") / name).exists(), "Credential file included in image"
           print("Credential-free image verified; discord.py", discord.__version__, "yt-dlp", yt_dlp.version.__version__)
