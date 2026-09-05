@@ -25,9 +25,18 @@ def rest(method, suffix='', body=None):
             path = Path(directory) / 'request.json'
             path.write_text(json.dumps(body)); path.chmod(0o600)
             args += ['--body', '@' + str(path)]
-        result = subprocess.run(args, capture_output=True, text=True, timeout=180)
+        # runningStatus can change before Azure releases its operation lock.
+        for attempt in range(24):
+            result = subprocess.run(args, capture_output=True, text=True, timeout=180)
+            if not result.returncode or 'ContainerAppOperationInProgress' not in result.stderr:
+                break
+            if attempt == 0:
+                print('Waiting for the previous Azure operation to finish.', flush=True)
+            time.sleep(5)
     if result.returncode:
-        raise RuntimeError(f'Azure {method} {suffix or "app"} failed (exit {result.returncode})')
+        codes = re.findall(r'"code"\s*:\s*"([A-Za-z0-9_.-]+)"', result.stderr)
+        detail = ','.join(dict.fromkeys(codes)) or f'exit {result.returncode}'
+        raise RuntimeError(f'Azure {method} {suffix or "app"} failed ({detail})')
     return json.loads(result.stdout) if result.stdout.strip() else None
 
 
@@ -130,8 +139,8 @@ def main():
         stopped = True
         rest('post', '/stop')
         wait_for(lambda p: p.get('runningStatus') == 'Stopped', 'Previous app stopped')
-        changed = True
         rest('patch', body={'properties': {'configuration': configuration, 'template': template}})
+        changed = True
         wait_for(lambda p: p.get('provisioningState') == 'Succeeded', 'New template applied')
         rest('post', '/start')
         revision = 'reibot--' + suffix
@@ -144,20 +153,28 @@ def main():
                                    for r in replicas for c in r['properties']['containers']):
             raise RuntimeError('Unexpected replicas, readiness or restarts')
         print('DEPLOYMENT_VERIFIED ' + revision, flush=True)
-    except BaseException:
-        print('Deployment did not pass; restoring the previous app template.', flush=True)
-        if changed:
-            rest('post', '/stop')
-            wait_for(lambda p: p.get('runningStatus') == 'Stopped', 'Failed revision stopped')
-            old = copy.deepcopy(before['properties']['template'])
-            old['revisionSuffix'] = 'rollback-' + suffix
-            for c in old['containers']:
-                c['resources'].pop('ephemeralStorage', None)
-            rest('patch', body={'properties': {'template': old}})
-            wait_for(lambda p: p.get('provisioningState') == 'Succeeded', 'Previous template restored')
-        if stopped:
-            rest('post', '/start')
-            wait_for(lambda p: p.get('runningStatus') == 'Running', 'Previous app restarted')
+    except BaseException as original:
+        print('Deployment did not pass: ' + str(original), flush=True)
+        try:
+            current = rest('get')['properties']
+            # Also handle an uncertain PATCH result by checking the actual image.
+            needs_restore = changed or current['template']['containers'][0]['image'] == image
+            if needs_restore:
+                if current.get('runningStatus') != 'Stopped':
+                    rest('post', '/stop')
+                    wait_for(lambda p: p.get('runningStatus') == 'Stopped', 'Failed revision stopped')
+                old = copy.deepcopy(before['properties']['template'])
+                old['revisionSuffix'] = 'rollback-' + suffix
+                for c in old['containers']:
+                    c['resources'].pop('ephemeralStorage', None)
+                rest('patch', body={'properties': {'template': old}})
+                wait_for(lambda p: p.get('provisioningState') == 'Succeeded', 'Previous template restored')
+        finally:
+            if stopped:
+                current = rest('get')['properties']
+                if current.get('runningStatus') != 'Running':
+                    rest('post', '/start')
+                    wait_for(lambda p: p.get('runningStatus') == 'Running', 'Previous app restarted')
         raise
 
 

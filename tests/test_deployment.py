@@ -2,6 +2,7 @@ import copy
 import io
 import os
 import stat
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -57,10 +58,14 @@ class DeploymentTests(unittest.TestCase):
 
     def test_media_failure_restores_previous_image_and_storage(self):
         before = app(); calls = []
+        current = copy.deepcopy(before)
         def fake_rest(method, suffix='', body=None):
             calls.append((method, suffix, copy.deepcopy(body)))
             if suffix == '/listSecrets': return {'value': [{'name': 'registry', 'value': 'fake-registry'}]}
-            if method == 'get': return before
+            if suffix == '/stop': current['properties']['runningStatus'] = 'Stopped'
+            if suffix == '/start': current['properties']['runningStatus'] = 'Running'
+            if method == 'patch': current['properties'].update(copy.deepcopy(body['properties']))
+            if method == 'get': return copy.deepcopy(current)
         env = {'DEPLOY_IMAGE': 'registry.hub.docker.com/hleitr/reibot@sha256:' + 'a' * 64,
                'DEPLOY_SUFFIX': 'gh-1-1', 'DISCORD_TOKEN': 'fake-sensitive-token',
                'YT_COOKIES': '# Netscape HTTP Cookie File\nfake-sensitive-cookie'}
@@ -77,6 +82,36 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(rollback['volumes'], before['properties']['template']['volumes'])
         self.assertEqual(calls[-1][:2], ('post', '/start'))
         self.assertNotIn('fake-sensitive', output.getvalue())
+
+    def test_rejected_patch_restarts_original_without_stopping_twice(self):
+        current = app(); calls = []
+        def fake_rest(method, suffix='', body=None):
+            calls.append((method, suffix))
+            if suffix == '/listSecrets': return {'value': []}
+            if suffix == '/stop': current['properties']['runningStatus'] = 'Stopped'
+            if suffix == '/start': current['properties']['runningStatus'] = 'Running'
+            if method == 'patch': raise RuntimeError('patch rejected')
+            if method == 'get': return copy.deepcopy(current)
+        env = {'DEPLOY_IMAGE': 'registry.hub.docker.com/hleitr/reibot@sha256:' + 'a' * 64,
+               'DEPLOY_SUFFIX': 'gh-2-1', 'DISCORD_TOKEN': 'fake',
+               'YT_COOKIES': '# Netscape HTTP Cookie File\nfake'}
+        with patch.dict(os.environ, env), patch.object(deployment, 'rest', side_effect=fake_rest), \
+             patch.object(deployment, 'wait_for'), redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError, 'patch rejected'):
+                deployment.main()
+        self.assertEqual(calls.count(('post', '/stop')), 1)
+        self.assertEqual(calls[-1], ('post', '/start'))
+        self.assertEqual(current['properties']['runningStatus'], 'Running')
+
+    def test_azure_operation_lock_is_retried_without_logging_payload(self):
+        results = [subprocess.CompletedProcess([], 1, '', '{"code":"ContainerAppOperationInProgress"}'),
+                   subprocess.CompletedProcess([], 0, '{"ok":true}', '')]
+        output = io.StringIO()
+        with patch.object(deployment.subprocess, 'run', side_effect=results) as run, \
+             patch.object(deployment.time, 'sleep'), redirect_stdout(output):
+            self.assertEqual(deployment.rest('patch', body={'secret': 'fake-private-value'}), {'ok': True})
+        self.assertEqual(run.call_count, 2)
+        self.assertNotIn('fake-private-value', output.getvalue())
 
 
 if __name__ == '__main__':
