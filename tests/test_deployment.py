@@ -1,17 +1,12 @@
 import copy
-import io
-import os
 import stat
-import subprocess
 import tempfile
 import unittest
-from contextlib import redirect_stdout
 from pathlib import Path
-from unittest.mock import patch
 
 from deploy.smoke import safe_media_error, redact_media_text
 from deploy.entrypoint import write_secrets
-from deploy import azure_deploy as deployment
+from deploy.prepare import configurations
 
 
 def app():
@@ -45,64 +40,37 @@ class DeploymentTests(unittest.TestCase):
                 write_secrets(folder, {'DISCORD_TOKEN': 'fake'})
             self.assertEqual(list(Path(folder).iterdir()), [])
 
-    def test_image_change_preserves_storage_resources_and_other_secrets(self):
+    def test_deployment_preserves_mounts_resources_and_rollback_credentials(self):
         before = app(); original = copy.deepcopy(before)
-        after = deployment.template_for(before, 'new-image', 'gh-1-1',
-                                        {'DISCORD_TOKEN': 'fake', 'YT_COOKIES': 'fake'})
+        values = {'DISCORD_TOKEN': 'fake-token', 'YT_COOKIES': '# Netscape HTTP Cookie File\n.example.com\tTRUE\t/\tTRUE\t0\tSID\tfake-cookie\n'}
+        deploy, rollback = configurations(before, [{'name': 'registry', 'value': 'fake-registry'}],
+            'registry.hub.docker.com/hleitr/reibot@sha256:' + 'a' * 64, 'gh-1-1', values)
         self.assertEqual(before, original)
+        after = deploy['properties']['template']
+        old = rollback['properties']['template']
         self.assertEqual(after['volumes'], before['properties']['template']['volumes'])
+        self.assertEqual(old['volumes'], after['volumes'])
+        self.assertEqual(old['containers'][0]['image'], 'old-image')
+        self.assertEqual(old['containers'][0]['env'], before['properties']['template']['containers'][0]['env'])
+        self.assertNotIn('fake-token', repr(rollback))
+        self.assertNotIn('fake-cookie', repr(rollback))
         container = after['containers'][0]
         self.assertEqual(container['resources'], {'cpu': .5, 'memory': '1Gi'})
         self.assertEqual(container['volumeMounts'], before['properties']['template']['containers'][0]['volumeMounts'])
         self.assertIn({'name': 'EXISTING', 'secretRef': 'unrelated-secret'}, container['env'])
         self.assertNotIn('value', repr(container['env']))
+        secrets = {v['name']: v['value'] for v in deploy['properties']['configuration']['secrets']}
+        self.assertEqual(secrets['registry'], 'fake-registry')
+        self.assertEqual(secrets['rb-gh-1-1-youtube'], values['YT_COOKIES'])
 
-    def test_media_failure_restores_previous_image_and_storage(self):
-        before = app(); calls = []
-        current = copy.deepcopy(before)
-        def fake_rest(method, suffix='', body=None):
-            calls.append((method, suffix, copy.deepcopy(body)))
-            if suffix == '/listSecrets': return {'value': [{'name': 'registry', 'value': 'fake-registry'}]}
-            if suffix == '/stop': current['properties']['runningStatus'] = 'Stopped'
-            if suffix == '/start': current['properties']['runningStatus'] = 'Running'
-            if method == 'patch': current['properties'].update(copy.deepcopy(body['properties']))
-            if method == 'get': return copy.deepcopy(current)
-        env = {'DEPLOY_IMAGE': 'registry.hub.docker.com/hleitr/reibot@sha256:' + 'a' * 64,
-               'DEPLOY_SUFFIX': 'gh-1-1', 'DISCORD_TOKEN': 'fake-sensitive-token',
-               'YT_COOKIES': '# Netscape HTTP Cookie File\nfake-sensitive-cookie'}
-        output = io.StringIO()
-        with patch.dict(os.environ, env), patch.object(deployment, 'rest', side_effect=fake_rest), \
-             patch.object(deployment, 'wait_for'), patch.object(deployment.time, 'sleep'), \
-             patch.object(deployment, 'smoke', side_effect=RuntimeError('media unavailable')), redirect_stdout(output):
-            with self.assertRaisesRegex(RuntimeError, 'media unavailable'):
-                deployment.main()
-        patches = [body for method, suffix, body in calls if method == 'patch']
-        self.assertEqual(len(patches), 2)
-        rollback = patches[-1]['properties']['template']
-        self.assertEqual(rollback['containers'][0]['image'], 'old-image')
-        self.assertEqual(rollback['volumes'], before['properties']['template']['volumes'])
-        self.assertEqual(calls[-1][:2], ('post', '/start'))
-        self.assertNotIn('fake-sensitive', output.getvalue())
-
-    def test_rejected_patch_restarts_original_without_stopping_twice(self):
-        current = app(); calls = []
-        def fake_rest(method, suffix='', body=None):
-            calls.append((method, suffix))
-            if suffix == '/listSecrets': return {'value': []}
-            if suffix == '/stop': current['properties']['runningStatus'] = 'Stopped'
-            if suffix == '/start': current['properties']['runningStatus'] = 'Running'
-            if method == 'patch': raise RuntimeError('patch rejected')
-            if method == 'get': return copy.deepcopy(current)
-        env = {'DEPLOY_IMAGE': 'registry.hub.docker.com/hleitr/reibot@sha256:' + 'a' * 64,
-               'DEPLOY_SUFFIX': 'gh-2-1', 'DISCORD_TOKEN': 'fake',
-               'YT_COOKIES': '# Netscape HTTP Cookie File\nfake'}
-        with patch.dict(os.environ, env), patch.object(deployment, 'rest', side_effect=fake_rest), \
-             patch.object(deployment, 'wait_for'), redirect_stdout(io.StringIO()):
-            with self.assertRaisesRegex(RuntimeError, 'patch rejected'):
-                deployment.main()
-        self.assertEqual(calls.count(('post', '/stop')), 1)
-        self.assertEqual(calls[-1], ('post', '/start'))
-        self.assertEqual(current['properties']['runningStatus'], 'Running')
+    def test_configuration_rejects_removed_storage_and_multiple_workers(self):
+        for change in ('storage', 'replicas'):
+            before = app()
+            if change == 'storage': before['properties']['template']['volumes'][0]['storageName'] = 'reibot'
+            else: before['properties']['template']['scale']['maxReplicas'] = 2
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                configurations(before, [], 'registry.hub.docker.com/hleitr/reibot@sha256:' + 'a' * 64,
+                    'gh-1-1', {'DISCORD_TOKEN': 'fake', 'YT_COOKIES': '# Netscape HTTP Cookie File'})
 
     def test_verbose_log_redaction_preserves_error_context(self):
         result = redact_media_text('debug\nError: cookie=private-cookie\nTraceback\nhttps://example.test/signed?token=secret',
@@ -121,21 +89,6 @@ class DeploymentTests(unittest.TestCase):
         self.assertNotIn('\n', result)
         self.assertIn('ERROR: failed', result)
 
-    def test_smoke_failure_reports_stage_without_exposing_raw_output(self):
-        output = b'private-token REIBOT_STORAGE_OK\nREIBOT_SMOKE_FAILED:DownloadError\nprivate-cookie'
-        self.assertEqual(deployment.smoke_failure(output),
-                         'REIBOT_STORAGE_OK, REIBOT_SMOKE_FAILED:DownloadError')
-        self.assertEqual(deployment.smoke_failure(b'private-token'), 'no check result received')
-
-    def test_azure_operation_lock_is_retried_without_logging_payload(self):
-        results = [subprocess.CompletedProcess([], 1, '', '{"code":"ContainerAppOperationInProgress"}'),
-                   subprocess.CompletedProcess([], 0, '{"ok":true}', '')]
-        output = io.StringIO()
-        with patch.object(deployment.subprocess, 'run', side_effect=results) as run, \
-             patch.object(deployment.time, 'sleep'), redirect_stdout(output):
-            self.assertEqual(deployment.rest('patch', body={'secret': 'fake-private-value'}), {'ok': True})
-        self.assertEqual(run.call_count, 2)
-        self.assertNotIn('fake-private-value', output.getvalue())
 
 
 if __name__ == '__main__':

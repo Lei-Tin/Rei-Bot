@@ -34,6 +34,7 @@ jobs:
           context: .
           file: ./Dockerfile
           load: true
+          provenance: false
           platforms: linux/amd64
           tags: hleitr/reibot:gh-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Verify image contains no application credentials
@@ -52,11 +53,14 @@ jobs:
           '
       - name: Publish verified image
         id: publish
-        run: |
-          image="hleitr/reibot:gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          docker push "$image"
-          digest=$(docker image inspect "$image" --format '{{index .RepoDigests 0}}')
-          echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
+        uses: docker/build-push-action@v7.3.0
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          tags: hleitr/reibot:gh-${{ github.run_id }}-${{ github.run_attempt }}
   deploy:
     needs: build
     if: github.ref == 'refs/heads/main'
@@ -65,6 +69,11 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      AZURE_CORE_OUTPUT: none
+      APP_ID: /subscriptions/de7b33ea-f724-4642-abfc-a17d47306ad2/resourceGroups/ReiBot/providers/Microsoft.App/containerApps/reibot
+      DEPLOY_IMAGE: registry.hub.docker.com/hleitr/reibot@${{ needs.build.outputs.digest }}
+      DEPLOY_SUFFIX: gh-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: azure/login@v3.0.2
@@ -72,13 +81,66 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: 0e855614-bb91-460f-9241-64096bdf7f2f
           subscription-id: de7b33ea-f724-4642-abfc-a17d47306ad2
-      - name: Install Container Apps CLI
-        run: az extension add --name containerapp --upgrade --only-show-errors
-      - name: Deploy runtime secrets and verify new revision
+          enable-AzPSSession: true
+      - name: Prepare private deployment and rollback configuration
+        id: prepare
         env:
-          DEPLOY_IMAGE: registry.hub.docker.com/hleitr/reibot@${{ needs.build.outputs.digest }}
-          DEPLOY_SUFFIX: gh-${{ github.run_id }}-${{ github.run_attempt }}
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
           BILIBILI_COOKIES: ${{ secrets.BILIBILI_COOKIES }}
-        run: python3 deploy/azure_deploy.py
+        run: python3 deploy/prepare.py
+      - name: Stop previous bot before cutover
+        id: stop
+        uses: azure/powershell@v3
+        with:
+          azPSVersion: latest
+          inlineScript: Stop-AzContainerApp -Name reibot -ResourceGroupName ReiBot -ErrorAction Stop | Out-Null
+      - name: Deploy with Azure Container Apps action
+        id: deploy
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          containerAppName: reibot
+          resourceGroup: ReiBot
+          location: westus
+          imageToDeploy: ${{ env.DEPLOY_IMAGE }}
+          yamlConfigPath: ${{ runner.temp }}/reibot-deploy/deploy.yaml
+          disableTelemetry: true
+      - name: Start deployed bot
+        uses: azure/powershell@v3
+        with:
+          azPSVersion: latest
+          inlineScript: Start-AzContainerApp -Name reibot -ResourceGroupName ReiBot -ErrorAction Stop | Out-Null
+      - name: Verify Discord, persistent storage and audio
+        id: verify
+        run: bash deploy/verify.sh "reibot--$DEPLOY_SUFFIX"
+      # Both deployment and recovery use the same official deployment action.
+      - name: Stop failed revision for recovery
+        id: recovery_stop
+        if: failure() && steps.prepare.outcome == 'success' && steps.stop.outcome != 'skipped'
+        uses: azure/powershell@v3
+        with:
+          azPSVersion: latest
+          inlineScript: Stop-AzContainerApp -Name reibot -ResourceGroupName ReiBot -ErrorAction Stop | Out-Null
+      - name: Restore previous image and secret references
+        id: rollback
+        if: failure() && steps.recovery_stop.outcome == 'success'
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          containerAppName: reibot
+          resourceGroup: ReiBot
+          location: westus
+          imageToDeploy: ${{ steps.prepare.outputs.previous_image }}
+          yamlConfigPath: ${{ runner.temp }}/reibot-deploy/rollback.yaml
+          disableTelemetry: true
+      - name: Restart bot after failed deployment
+        if: always() && steps.prepare.outcome == 'success' && steps.stop.outcome != 'skipped' && steps.verify.outcome != 'success'
+        uses: azure/powershell@v3
+        with:
+          azPSVersion: latest
+          inlineScript: Start-AzContainerApp -Name reibot -ResourceGroupName ReiBot -ErrorAction Stop | Out-Null
+      - name: Verify recovered bot
+        if: failure() && steps.rollback.outcome == 'success'
+        run: bash deploy/verify.sh "reibot--rollback-$DEPLOY_SUFFIX"
+      - name: Remove temporary credential configuration
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/reibot-deploy"
