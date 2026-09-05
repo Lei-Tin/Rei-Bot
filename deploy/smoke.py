@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, "/app/Rei")
@@ -14,6 +15,9 @@ def main():
     import config
     import yt_dlp
 
+    deadline = time.monotonic() + 60
+    while not Path("/tmp/reibot-ready").exists() and time.monotonic() < deadline:
+        time.sleep(2)
     if not Path("/tmp/reibot-ready").exists():
         raise RuntimeError("Discord gateway is not ready")
     folder = Path("/app/Rei/Guilds")
@@ -53,5 +57,15 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
+        # Report a small fixed vocabulary; exception text can contain URLs or credentials.
+        message = str(exc).lower()
+        for phrase, marker in (("sign in to confirm", "AUTH_REQUIRED"),
+                               ("cookies are no longer valid", "COOKIES_INVALID"),
+                               ("requested format is not available", "FORMAT_UNAVAILABLE"),
+                               ("video unavailable", "VIDEO_UNAVAILABLE"),
+                               ("remote audio decoding failed", "AUDIO_DECODE_FAILED"),
+                               ("discord gateway is not ready", "DISCORD_NOT_READY")):
+            if phrase in message:
+                print("REIBOT_DETAIL_" + marker, flush=True)
         print(f"REIBOT_SMOKE_FAILED:{type(exc).__name__}", flush=True)
         sys.exit(1)

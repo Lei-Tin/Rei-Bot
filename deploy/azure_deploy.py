@@ -73,6 +73,17 @@ def template_for(before, image, suffix, values):
     return template
 
 
+def smoke_failure(output):
+    """Expose only allowlisted diagnostics, never raw CLI or media output."""
+    text = output.decode(errors='replace')
+    markers = re.findall(r'REIBOT_(?:STORAGE_OK|SMOKE_FAILED:[A-Za-z]+)', text)
+    markers += re.findall(r'REIBOT_DETAIL_(?:AUTH_REQUIRED|COOKIES_INVALID|FORMAT_UNAVAILABLE|VIDEO_UNAVAILABLE|AUDIO_DECODE_FAILED|DISCORD_NOT_READY)', text)
+    known = [name for name in ('AuthorizationFailed', 'Forbidden', 'ConnectionError',
+                               'WebSocket', 'No such file', 'unrecognized arguments')
+             if name in text]
+    return ', '.join(dict.fromkeys(markers + known)) or 'no check result received'
+
+
 def smoke(revision, url):
     if not re.fullmatch(r'https://www\.youtube\.com/watch\?v=[A-Za-z0-9_-]{11}', url):
         raise ValueError('Smoke test must be a canonical YouTube video URL')
@@ -82,7 +93,7 @@ def smoke(revision, url):
                                 'python /app/deploy/smoke.py ' + url],
                                stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
     os.close(slave)
-    output = bytearray(); deadline = time.monotonic() + 150
+    output = bytearray(); deadline = time.monotonic() + 210
     try:
         while time.monotonic() < deadline:
             readable, _, _ = select.select([master], [], [], 1)
@@ -97,7 +108,7 @@ def smoke(revision, url):
             elif process.poll() is not None:
                 break
         if b'REIBOT_SMOKE_OK' not in output:
-            raise RuntimeError('Deployed storage/Discord/media smoke check failed')
+            raise RuntimeError('Deployed smoke check failed: ' + smoke_failure(output))
         print('Storage, Discord readiness and remote audio decoding verified.', flush=True)
     finally:
         if process.poll() is None:

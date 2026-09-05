@@ -32,7 +32,9 @@ replica readiness and unexpected restarts. A failed deployment restores the
 previous app template and starts it. A previous version can itself have an
 external authentication problem; rollback is not a guarantee that YouTube
 accepts its older cookie session. Real Discord voice delivery still needs a
-human playback test.
+human playback test. Failure logs show only allowlisted stage/error categories;
+they do not include raw media errors or credential contents. A readiness marker
+can take up to 60 seconds to appear after Azure marks the container ready.
 
 Old runtime secret versions are retained for rollback. Review and remove only
 unreferenced `rb-gh-*` secrets periodically after old revisions are retired.

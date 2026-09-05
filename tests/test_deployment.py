@@ -103,6 +103,12 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(calls[-1], ('post', '/start'))
         self.assertEqual(current['properties']['runningStatus'], 'Running')
 
+    def test_smoke_failure_reports_stage_without_exposing_raw_output(self):
+        output = b'private-token REIBOT_STORAGE_OK\nREIBOT_SMOKE_FAILED:DownloadError\nprivate-cookie'
+        self.assertEqual(deployment.smoke_failure(output),
+                         'REIBOT_STORAGE_OK, REIBOT_SMOKE_FAILED:DownloadError')
+        self.assertEqual(deployment.smoke_failure(b'private-token'), 'no check result received')
+
     def test_azure_operation_lock_is_retried_without_logging_payload(self):
         results = [subprocess.CompletedProcess([], 1, '', '{"code":"ContainerAppOperationInProgress"}'),
                    subprocess.CompletedProcess([], 0, '{"ok":true}', '')]
