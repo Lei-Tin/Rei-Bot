@@ -81,7 +81,8 @@ def smoke_failure(output):
     known = [name for name in ('AuthorizationFailed', 'Forbidden', 'ConnectionError',
                                'WebSocket', 'No such file', 'unrecognized arguments')
              if name in text]
-    return ', '.join(dict.fromkeys(markers + known)) or 'no check result received'
+    details = re.findall(r'REIBOT_MEDIA_ERROR ([^\r\n]{1,600})', text)
+    return ', '.join(dict.fromkeys(markers + known + details)) or 'no check result received'
 
 
 def smoke(revision, url):

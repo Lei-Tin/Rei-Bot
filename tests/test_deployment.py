@@ -9,6 +9,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+from deploy.smoke import safe_media_error
 from deploy.entrypoint import write_secrets
 from deploy import azure_deploy as deployment
 
@@ -102,6 +103,15 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(calls.count(('post', '/stop')), 1)
         self.assertEqual(calls[-1], ('post', '/start'))
         self.assertEqual(current['properties']['runningStatus'], 'Running')
+
+    def test_media_error_redacts_cookies_token_and_signed_urls(self):
+        message = 'ERROR: failed for fake-cookie and fake-token at https://example.test/audio?signature=private\nretry'
+        result = safe_media_error(message, ['fake-cookie', 'fake-token'])
+        self.assertNotIn('fake-cookie', result)
+        self.assertNotIn('fake-token', result)
+        self.assertNotIn('signature', result)
+        self.assertNotIn('\n', result)
+        self.assertIn('ERROR: failed', result)
 
     def test_smoke_failure_reports_stage_without_exposing_raw_output(self):
         output = b'private-token REIBOT_STORAGE_OK\nREIBOT_SMOKE_FAILED:DownloadError\nprivate-cookie'

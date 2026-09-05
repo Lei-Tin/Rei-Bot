@@ -1,6 +1,9 @@
 """Run inside the deployed container. Print only non-sensitive check results."""
 import copy
 import os
+import json
+import re
+from urllib.parse import quote
 import shutil
 import subprocess
 import sys
@@ -9,6 +12,19 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, "/app/Rei")
+
+
+def safe_media_error(message, secret_values):
+    """Redact runtime credentials and URLs before surfacing a media error."""
+    variants = set()
+    for value in secret_values:
+        if value:
+            variants.update((value, repr(value)[1:-1], json.dumps(value)[1:-1], quote(value, safe='')))
+    for value in sorted(variants, key=len, reverse=True):
+        message = message.replace(value, '[redacted]')
+    message = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', message)
+    message = re.sub(r'https?://\S+', '[url]', message)
+    return ' '.join(message.split())[:600]
 
 
 def main():
@@ -41,7 +57,21 @@ def main():
         options.update(cookiefile=str(cookie), logger=QuietLogger(), quiet=True,
                        socket_timeout=15, retries=0, extractor_retries=0, cachedir=False)
         with yt_dlp.YoutubeDL(options) as downloader:
-            result = downloader.extract_info(sys.argv[1], download=False)
+            try:
+                result = downloader.extract_info(sys.argv[1], download=False)
+            except yt_dlp.utils.DownloadError as exc:
+                values = [c.value for c in downloader.cookiejar]
+                # Include original values, even if the temporary jar was rotated.
+                for name in ('cookies.txt', 'bilibili_cookies.txt'):
+                    path = Path('/app/Rei') / name
+                    if path.exists():
+                        values.extend(row.split('\t')[-1] for row in path.read_text().splitlines()
+                                      if len(row.split('\t')) == 7)
+                token = Path('/app/Rei/discord_token')
+                if token.exists():
+                    values.append(token.read_text().strip())
+                print('REIBOT_MEDIA_ERROR ' + safe_media_error(str(exc), values), flush=True)
+                raise
         stream = result.get("url")
         if not stream:
             raise RuntimeError("Media extraction did not return an audio stream")
