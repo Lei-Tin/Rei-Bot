@@ -4,3 +4,11 @@
 **/__pycache__
 **/dist
 **/rei.spec
+
+# Local agent workspace and investigation artifacts
+/.agents/
+/.codex/
+/AZURE_IMAGE_UPDATE_RESEARCH.md
+/AZURE_OPERATIONS.md
+/GITHUB_ACTIONS_REVIEW.md
+/diagnostics/
