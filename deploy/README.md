@@ -15,7 +15,9 @@ on Azure Files; current playback and the in-memory queue reset on deployment.
 Azure login is already configured with OIDC. Repository variables
 `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` hold the account
 identifiers. No subscription IDs need to be entered for normal deployments.
-The existing app-scoped identity and permissions are unchanged.
+The existing OIDC identity has app-scoped deployment rights plus the single
+`managedEnvironments/join/action` permission on the existing ReiBot environment,
+as required by Azure CLI updates. It has no resource-group-wide management role.
 
 GitHub secrets:
 
