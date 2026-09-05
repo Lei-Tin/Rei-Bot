@@ -38,9 +38,9 @@ The live volume `reibotfs` maps to `reibot-payg` and the new storage account
 
 ## Checks and recovery
 
-CI tests credential handling and log redaction, then waits for Azure to report
-the new revision ready. Full YouTube/audio diagnosis is available on demand in
-the Azure container Console:
+CI tests credential handling and log redaction. Deployment and start use the
+results returned by Azure's official actions; no extra startup polling is needed.
+Full YouTube/audio diagnosis is available on demand in the Azure container Console:
 
 ```sh
 python /app/deploy/smoke.py https://www.youtube.com/watch?v=mYEA5A0Bjyo

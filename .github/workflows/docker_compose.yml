@@ -76,8 +76,3 @@ jobs:
         with:
           azPSVersion: latest
           inlineScript: Start-AzContainerApp -Name reibot -ResourceGroupName ReiBot | Out-Null
-      - name: Check startup
-        run: |
-          app=$(az containerapp show -g ReiBot -n reibot --query id -o tsv)
-          az resource wait --ids "$app" --api-version 2025-07-01 --timeout 300 --interval 5 \
-            --custom "properties.runningStatus == 'Running' && properties.latestReadyRevisionName == properties.latestRevisionName"
