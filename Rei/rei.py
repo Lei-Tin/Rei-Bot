@@ -2,7 +2,7 @@
 The main file for the bot
 """
 # Change the version string every update
-version = 'Apr 6, 2026 17:10'
+version = 'Sep 5, 2026 (runtime secrets)'
 
 import asyncio
 import ctypes
@@ -18,13 +18,14 @@ import discord
 from discord import app_commands
 
 import os
+from pathlib import Path
 import re
 import yt_dlp
 import logging
 import random
 import functools
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 import csv
@@ -85,6 +86,17 @@ async def on_ready() -> None:
 
     logger.info('Rei Bot is ready!')
     logger.info(f'Version: {version}')
+    Path('/tmp/reibot-ready').touch()
+
+
+@client.event
+async def on_disconnect() -> None:
+    Path('/tmp/reibot-ready').unlink(missing_ok=True)
+
+
+@client.event
+async def on_resumed() -> None:
+    Path('/tmp/reibot-ready').touch()
 
 
 @client.event

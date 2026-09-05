@@ -1,34 +1,80 @@
-name: Build and Deploy to Microsoft Azure Container Apps
+name: Build and deploy ReiBot to Azure
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reibot-production
+  cancel-in-progress: false
 
 jobs:
   build:
-    runs-on: 'ubuntu-latest'
-
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
     steps:
-    - uses: actions/checkout@v2
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
-
-    - name: Log in to DockerHub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_PASSWORD }}
-
-    - name: Build and push container image to registry
-      uses: docker/build-push-action@v3
-      with:
-        push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/reibot:latest
-        file: ./Dockerfile
-        build-args: |
-          "token=${{ secrets.DISCORD_TOKEN }}"
-          "yt_cookies=${{ secrets.YT_COOKIES }}"
-          "bilibili_cookies=${{ secrets.BILIBILI_COOKIES }}"
+      - uses: actions/checkout@v4
+      - name: Test runtime credential handling
+        run: python3 -m unittest discover -s tests -v
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Build code-only image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          platforms: linux/amd64
+          tags: hleitr/reibot:gh-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Verify image contains no application credentials
+        run: |
+          image="hleitr/reibot:gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker run --rm --entrypoint python "$image" -c '
+          from pathlib import Path
+          import discord, yt_dlp.version
+          for name in ("discord_token", "cookies.txt", "bilibili_cookies.txt"):
+              assert not (Path("/app/Rei") / name).exists(), "Credential file included in image"
+          print("Credential-free image verified; discord.py", discord.__version__, "yt-dlp", yt_dlp.version.__version__)
+          '
+      - name: Publish verified image
+        id: publish
+        run: |
+          image="hleitr/reibot:gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker push "$image"
+          digest=$(docker image inspect "$image" --format '{{index .RepoDigests 0}}')
+          echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: 0e855614-bb91-460f-9241-64096bdf7f2f
+          subscription-id: de7b33ea-f724-4642-abfc-a17d47306ad2
+      - name: Install Container Apps CLI
+        run: az extension add --name containerapp --upgrade --only-show-errors
+      - name: Deploy runtime secrets and verify new revision
+        env:
+          DEPLOY_IMAGE: registry.hub.docker.com/hleitr/reibot@${{ needs.build.outputs.digest }}
+          DEPLOY_SUFFIX: gh-${{ github.run_id }}-${{ github.run_attempt }}
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          YT_COOKIES: ${{ secrets.YT_COOKIES }}
+          BILIBILI_COOKIES: ${{ secrets.BILIBILI_COOKIES }}
+        run: python3 deploy/azure_deploy.py

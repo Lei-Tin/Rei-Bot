@@ -1,0 +1,15 @@
+.git
+.github
+.env
+.env.*
+**/.env
+**/.env.*
+**/discord_token
+**/*cookies*.txt
+**/Guilds
+**/__pycache__
+**/*.pyc
+.venv
+venv
+tests
+*.md
