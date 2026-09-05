@@ -28,19 +28,17 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       - name: Build and push
-        id: image
         uses: docker/build-push-action@v7.3.0
         with:
           context: .
           push: true
           provenance: false
-          tags: hleitr/reibot:gh-${{ github.run_id }}-${{ github.run_attempt }}
+          tags: hleitr/reibot:latest
       - uses: azure/login@v3.0.2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          enable-AzPSSession: true
       - name: Sync runtime secrets
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
@@ -51,28 +49,7 @@ jobs:
           az containerapp secret set -g ReiBot -n reibot --secrets \
             "discord-token=$DISCORD_TOKEN" "youtube-cookies=$YT_COOKIES" \
             "bilibili-cookies=$BILIBILI_COOKIES"
-      # Avoid two Discord workers during the update; always restart after it.
-      - name: Stop bot
-        id: stop
-        uses: azure/powershell@v3
-        with:
-          azPSVersion: latest
-          inlineScript: Stop-AzContainerApp -Name reibot -ResourceGroupName ReiBot | Out-Null
-      - name: Deploy image
-        uses: azure/container-apps-deploy-action@v2
-        with:
-          containerAppName: reibot
-          resourceGroup: ReiBot
-          location: westus
-          imageToDeploy: registry.hub.docker.com/hleitr/reibot@${{ steps.image.outputs.digest }}
-          environmentVariables: >-
-            DISCORD_TOKEN=secretref:discord-token
-            YT_COOKIES=secretref:youtube-cookies
-            BILIBILI_COOKIES=secretref:bilibili-cookies
-          disableTelemetry: true
-      - name: Start bot
-        if: always() && steps.stop.outcome != 'skipped'
-        uses: azure/powershell@v3
-        with:
-          azPSVersion: latest
-          inlineScript: Start-AzContainerApp -Name reibot -ResourceGroupName ReiBot | Out-Null
+      - name: Restart bot to pull latest
+        run: |
+          revision=$(az containerapp show -g ReiBot -n reibot --query properties.latestReadyRevisionName -o tsv)
+          az containerapp revision restart -g ReiBot -n reibot --revision "$revision"
