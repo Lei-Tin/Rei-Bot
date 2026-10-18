@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1] - 2026-10-18
+
+### Added
+
+- Added automatic song volume matching for streamed and downloaded audio, with a switch and loudness target in `Rei/config.py`.
+- Log the selected audio codec, bitrate, and sample rate to help check source quality.
+
+### Fixed
+
+- Song extraction and playlist loading no longer block other bot commands. Songs load sequentially in the background with timeouts, and unavailable songs are skipped.
+- Fixed `/skip` and the audio callback both advancing the queue. Playback and connection changes now share one transition per server.
+- Clearing or disconnecting retires the queue and cancels its tasks. Late results and callbacks cannot add songs to a new queue.
+- Wait for songs still being loaded before disconnecting, and clean up completed background tasks.
+- Keep queue fields aligned when removing a song in download mode.
+
 ## [1.5] - 2026-10-18
 
 ### Added

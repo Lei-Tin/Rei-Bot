@@ -9,6 +9,11 @@ MAX_DISPLAY_LENGTH = 15  # Used to limit displays to 15 songs
 DOWNLOAD = False
 
 VOICE_CALL_TIMEOUT = 60
+SONG_LOAD_TIMEOUT = 45
+
+# Match perceived volume between songs. Set to False to keep the source's volume.
+NORMALIZE_AUDIO = True
+AUDIO_TARGET_LUFS = -16
 
 FFMPEG_OPTIONS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 10',

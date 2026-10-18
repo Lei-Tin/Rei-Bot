@@ -1,4 +1,4 @@
-# Rei-Bot v1.5
+# Rei-Bot v1.5.1
 
 A Discord Bot that is used to play music
 
@@ -9,9 +9,12 @@ Written in Python, not configured for public usage. Currently hosted on Microsof
 - Play music from YouTube
 - Have a queue of songs
 - Choose to download the songs or stream directly
+- Match the volume of different songs automatically
 - Create and edit saved playlists with buttons, menus, and popups
 - Does not support YouTube search query links
 - Does not support playing in multiple channels in the same server at the same time
+
+Song volume is matched with FFmpeg loudness normalization, targeting -16 LUFS. Set `NORMALIZE_AUDIO = False` in `Rei/config.py` to keep the original volume, or adjust `AUDIO_TARGET_LUFS` to change the target. This works while streaming, so the volume should be similar between songs but may still vary. No noise suppression or vocal filters are applied.
 
 # Commands
 
@@ -41,6 +44,8 @@ Use "/playlist" to choose a playlist or create a new one. The editor shows 10 so
 
 Changes are saved automatically. Removing the last song keeps an empty playlist. Editing a playlist does not change the songs already in the queue; use "/playlist-enqueue" to enqueue the saved playlist.
 
+Playlist songs load in the background. If the next song is still loading, the bot waits for it. Failed songs are skipped, and "/clear" cancels the loading queue as well.
+
 Note: **DOES NOT SUPPORT** importing whole YouTube playlists or channels. A video link with a playlist attached (`watch?v=...&list=...`) adds only that video. If a link fails or times out, the editor shows which line failed and still adds the other valid songs.
 
 The editor expires after 10 minutes of inactivity. Use "/playlist" to open it again. If someone else changes the playlist, refresh and select the songs again before removing or moving them.
@@ -66,6 +71,8 @@ To install the test dependency and run the tests:
 python3 -m pip install 'discord.py==2.7.1'
 python3 -m unittest discover -s tests -v
 ```
+
+The tests cover playback, skipping, cancellation, and playlist editing without connecting to Discord or YouTube. Install FFmpeg to also run the audio tests, which check volume matching with generated WAV files.
 
 To preview the playlist editor locally:
 

@@ -1,7 +1,9 @@
 """
 This is the file for a Queue object, which stores information about the Queue in a specific guild
 """
-from config import MAX_SONG_NAME_LENGTH, MAX_DISPLAY_LENGTH
+import asyncio
+
+from config import MAX_DISPLAY_LENGTH
 from utils import truncate
 
 
@@ -21,7 +23,11 @@ class Queue:
         self.text_channel = text_channel
         self.voice_client = None
         self.playing = False
-        self.tasks = []
+        # Playback state belongs to the event loop; threads only return media information.
+        self.lock = asyncio.Lock()
+        self.closed = False
+        self.playback_token = None
+        self.tasks = set()
 
     def show(self) -> str:
         """
