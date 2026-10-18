@@ -443,3 +443,24 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 release.set()
                 await command
+
+    async def test_repeated_close_waits_for_the_existing_disconnect_cleanup(self):
+        queue = self.queue('A')
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def disconnect(**kwargs):
+            started.set()
+            await release.wait()
+            self.voice.connected = False
+
+        self.voice.disconnect.side_effect = disconnect
+        first = asyncio.create_task(self.bot.close_queue(10, queue))
+        await started.wait()
+        second = asyncio.create_task(self.bot.close_queue(10, queue))
+        await asyncio.sleep(0)
+        self.assertFalse(first.done())
+        release.set()
+        await asyncio.wait_for(asyncio.gather(first, second), 1)
+        self.voice.disconnect.assert_awaited_once()
+        self.assertNotIn(10, self.bot.q)
+        self.assertFalse(queue.tasks)

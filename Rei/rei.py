@@ -183,17 +183,18 @@ async def close_queue(guild_id: int, queue: Queue) -> None:
     if queue.closed:
         # Another transition is already disconnecting; let its cleanup finish.
         async with queue.lock:
-            return
-    # Invalidate immediately, including while a connect operation holds the transition lock.
-    queue.closed = True
-    for task in tuple(queue.tasks):
-        if task is not asyncio.current_task():
-            task.cancel()
-    async with queue.lock:
+            tasks = tuple(task for task in queue.tasks if task is not asyncio.current_task())
+    else:
+        # Snapshot before cancellation: a task may release the lock before its done callback runs.
         tasks = tuple(task for task in queue.tasks if task is not asyncio.current_task())
-        await close_queue_locked(guild_id, queue)
+        queue.closed = True
+        for task in tasks:
+            task.cancel()
+        async with queue.lock:
+            await close_queue_locked(guild_id, queue)
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
+        queue.tasks.difference_update(tasks)
 
 
 def get_playback_queue(interaction: discord.Interaction) -> Queue:
