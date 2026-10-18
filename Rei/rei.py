@@ -2,7 +2,7 @@
 The main file for the bot
 """
 # Change the version string every update
-version = 'Sep 5, 2026 (runtime secrets)'
+version = 'v1.5 (Oct 18, 2026)'
 
 import asyncio
 import ctypes
@@ -13,6 +13,9 @@ from typing import Union, List, Callable, Coroutine
 from config import *
 from Queue import Queue
 from utils import truncate
+from playlists import PlaylistError, PlaylistSong, PlaylistStore
+from playlist_links import PLAYLIST_LINK_MESSAGE, normalize_song_url
+from playlist_ui import PlaylistEditor
 
 import discord
 from discord import app_commands
@@ -28,8 +31,6 @@ import functools
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-import csv
-
 import platform
 
 emoji_pattern = re.compile("["
@@ -42,6 +43,7 @@ emoji_pattern = re.compile("["
 intents = discord.Intents.default()
 
 FILE_DIR = os.path.dirname(os.path.realpath(__file__))
+playlist_store = PlaylistStore(Path(FILE_DIR) / 'Guilds')
 
 if os.path.isfile(os.path.join(FILE_DIR, 'discord_token')):
     with open(os.path.join(FILE_DIR, 'discord_token')) as f:
@@ -144,6 +146,17 @@ def to_thread(func: Callable) -> Coroutine:
         return await asyncio.to_thread(func, *args, **kwargs)
     return wrapper
 
+
+async def announce_now_playing(queue: Queue, song: str, original_link: str) -> None:
+    remaining = len(queue.songs) + queue.pending_songs
+    noun = 'song' if remaining == 1 else 'songs'
+    title = truncate(emoji_pattern.sub(r"", song))
+    await queue.text_channel.send(
+        f'Now playing: "[{title}]({original_link})"!\n{remaining} {noun} remaining',
+        suppress_embeds=True,
+    )
+
+
 def play_song(guild_id: int) -> None:
     """
     Play a song in the queue
@@ -179,7 +192,7 @@ def play_song(guild_id: int) -> None:
                               after=lambda e: play_song(guild_id))
 
         asyncio.run_coroutine_threadsafe(
-            queue.text_channel.send(f'Now playing: "[{truncate(emoji_pattern.sub(r"", song))}]({original_link})"!'),
+            announce_now_playing(queue, song, original_link),
             client.loop)
     else:
         asyncio.run_coroutine_threadsafe(voice_client.disconnect(), client.loop)
@@ -223,7 +236,7 @@ async def play_music(guild_id: int):
             voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS),
                               after=lambda e: play_song(guild_id))
 
-        await queue.text_channel.send(f'Now playing: "[{truncate(emoji_pattern.sub(r"", song))}]({original_link})"!')
+        await announce_now_playing(queue, song, original_link)
     else:
         queue.playing = False
 
@@ -441,184 +454,126 @@ async def remove(interaction: discord.Interaction, index: int) -> None:
     await interaction.edit_original_response(
         content=f'Successfully removed "{song}" at index **{index}**!')
 
-@tree.command(name="playlist-add",
-              description="Adds a song to a playlist with a given name, creates it if it does not exist")
-@app_commands.describe(name='The name of the playlist',
-                       link='The music video link')
-async def pl_add(interaction: discord.Interaction, name: str, link: str) -> None:
-    """
-    Adds a song to a playlist
+def extract_playlist_song(link: str) -> PlaylistSong:
+    link = normalize_song_url(link)
+    options = dict(YDL_OPTS_STREAM, noplaylist=True, lazy_playlist=True,
+                   socket_timeout=15, retries=1, extractor_retries=1, ignoreerrors=False)
+    try:
+        with yt_dlp.YoutubeDL(options) as ydl:
+            visited = set()
+            extractor_key = None
+            for _ in range(5):
+                if link in visited:
+                    raise PlaylistError('This link redirects in a loop. Use the original video URL.')
+                visited.add(link)
+                # Inspect the result before yt-dlp can expand a playlist, including redirected links.
+                info = ydl.extract_info(link, download=False, process=False, ie_key=extractor_key)
+                if not isinstance(info, dict) or not info:
+                    raise PlaylistError('The URL did not return a playable song.')
+                result_type = info.get('_type', 'video')
+                if 'entries' in info or result_type in ('playlist', 'multi_video', 'compat_list'):
+                    raise PlaylistError(PLAYLIST_LINK_MESSAGE)
+                if result_type in ('url', 'url_transparent'):
+                    link = normalize_song_url(info.get('url'))
+                    extractor_key = info.get('ie_key')
+                    continue
+                if result_type != 'video':
+                    raise PlaylistError('The URL did not return a playable song.')
+                # Validate formats only for this video; never resolve collection entries.
+                info = ydl.process_video_result(info, download=False)
+                if not isinstance(info, dict):
+                    raise PlaylistError('The URL did not return a playable song.')
+                title, song_id = info.get('title'), info.get('id')
+                if not isinstance(title, str) or not title.strip() or not song_id:
+                    raise PlaylistError('The URL did not return a playable song.')
+                url = normalize_song_url(info.get('webpage_url') or info.get('original_url') or link)
+                return PlaylistSong(title.strip(), str(song_id), url)
+            raise PlaylistError('This link redirects too many times. Use the original video URL.')
+    except (yt_dlp.utils.YoutubeDLError, OSError, TimeoutError) as error:
+        raise PlaylistError('Could not load this song. Check the URL and try again.') from error
 
-    Does multiple things: 
-    1. Create the folder for playlists under the current guild if not exists
-    2. Check if the file exists with the "name".txt
-        a. If exists, append to it
-        b. If not exists, create and write in it
-    """
-    if not name.isalnum():
-        await interaction.response.send_message("The name of the playlist must be alphanumeric!")
+
+async def open_playlist_editor(interaction: discord.Interaction, name=None, page=1) -> None:
+    if interaction.guild_id is None:
+        await interaction.response.send_message('Use this command in a server.', ephemeral=True)
         return
-
-    if len(name) > MAX_SONG_NAME_LENGTH:
-        await interaction.response.send_message(f"The name of the playlist can only be lesser than {MAX_SONG_NAME_LENGTH} characters!")
-        return
-
-    await interaction.response.send_message("Processing...")
-
-    with yt_dlp.YoutubeDL(YDL_OPTS_STREAM) as ydl:
-        try:
-            # Disable search queries
-            if 'search_query' in link:
-                raise yt_dlp.utils.DownloadError('Search queries are not allowed!')
-
-            info_dict = ydl.extract_info(link, download=False)
-
-            if 'entries' in info_dict:
-                await interaction.edit_original_response(content='Playlist links are not allowed!')
-                return
-        except (yt_dlp.utils.DownloadError, yt_dlp.utils.ExtractorError, yt_dlp.utils.YoutubeDLError) as error:
-            await interaction.edit_original_response(
-            content=f'{error} | Failed to retrieve information from the link!')
-            return
-
-    guild_id = interaction.guild_id
-
-    path = [FILE_DIR, 'Guilds', str(guild_id), 'playlists']
-    os.makedirs(os.path.join(*path), exist_ok=True)
-
-    path += [f'{name}.csv']
-
-    song = info_dict.get('title', None)
-    id = info_dict.get('id', None)
-    original_url = info_dict.get('original_url', None)
-
-    if os.path.isfile(os.path.join(*path)):
-        # If the file exists with name.csv, append to it
-        with open(os.path.join(*path), 'a+', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow([song, id, original_url])
-    else:
-        with open(os.path.join(*path), 'w+', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(['name', 'id', 'orig_url'])
-            writer.writerow([song, id, original_url])
-
-    await interaction.edit_original_response(content=f'Successfully added "**{truncate(song)}**" to playlist "**{name}**"')
-
-@tree.command(name="playlist-view",
-              description="Views the playlist with the given name, shows a list of the songs added")
-@app_commands.describe(name='The name of the playlist', 
-                       page='The page number (Each page is 10 songs)')
-async def pl_view(interaction: discord.Interaction, name: str, page: int) -> None:
-    """
-    Checks the songs included in the playlist with the given name
-    """
-    if not name.isalnum():
-        await interaction.response.send_message("The name of the playlist must be alphanumeric!")
-        return
-
-    if len(name) > MAX_SONG_NAME_LENGTH:
-        await interaction.response.send_message(f"The name of the playlist can only be lesser than {MAX_SONG_NAME_LENGTH} characters!")
-        return
-    
     if page < 1:
-        await interaction.response.send_message("The page number is invalid!")
+        await interaction.response.send_message('The page number is invalid!', ephemeral=True)
         return
-
-    guild_id = interaction.guild_id
-
-    await interaction.response.send_message("Processing...")
-
-    path = [FILE_DIR, 'Guilds', str(guild_id), 'playlists']
-    os.makedirs(os.path.join(*path), exist_ok=True)
-
-    path += [f'{name}.csv']
-
-    if not os.path.isfile(os.path.join(*path)):
-        await interaction.edit_original_response(content=f'The playlist named "{name}" does not exist!')
+    try:
+        editor = PlaylistEditor(playlist_store, interaction.guild_id, interaction.user.id,
+                                extract_playlist_song, name=name, page=page - 1)
+        embed = editor.render()
+    except PlaylistError as error:
+        await interaction.response.send_message(str(error), ephemeral=True)
         return
+    await interaction.response.send_message(embed=embed, view=editor, ephemeral=True)
+    editor.message = await interaction.original_response()
 
-    names = []
-    with open(os.path.join(*path), 'r') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            names.append(row["name"])
 
-    if page > len(names) // MAX_DISPLAY_LENGTH + 1 or len(names) % MAX_DISPLAY_LENGTH == 0 and page > len(names) // MAX_DISPLAY_LENGTH:
-        await interaction.edit_original_response(content=f'The page number is invalid!')
+@tree.command(name="playlist", description="Browse and edit playlists with buttons and menus")
+@app_commands.guild_only()
+@app_commands.describe(name='Optional playlist to open directly')
+async def playlist(interaction: discord.Interaction, name: str = None) -> None:
+    await open_playlist_editor(interaction, name)
+
+
+@tree.command(name="playlist-add", description="Adds a song to a playlist, creating it if needed")
+@app_commands.guild_only()
+@app_commands.describe(name='The name of the playlist', link='The music video link')
+async def pl_add(interaction: discord.Interaction, name: str, link: str) -> None:
+    try:
+        playlist_store.validate_name(name)
+    except PlaylistError as error:
+        await interaction.response.send_message(str(error))
         return
-    
-    # Ceiling division
-    total_pages = len(names) // MAX_DISPLAY_LENGTH + (len(names) % MAX_DISPLAY_LENGTH != 0) * 1
-
-    names = names[(page - 1) * MAX_DISPLAY_LENGTH:page * MAX_DISPLAY_LENGTH]
-
+    await interaction.response.defer(thinking=True)
+    try:
+        song = await asyncio.wait_for(asyncio.to_thread(extract_playlist_song, link), timeout=45)
+        playlist_store.append(interaction.guild_id, name, [song], create=True)
+    except asyncio.TimeoutError:
+        await interaction.edit_original_response(content='Loading this song timed out. Please try again.')
+        return
+    except PlaylistError as error:
+        await interaction.edit_original_response(content=str(error))
+        return
+    except Exception:
+        logger.exception('Could not add a song to a playlist')
+        await interaction.edit_original_response(content='Could not add this song. Please try again.')
+        return
     await interaction.edit_original_response(
-            content=f'Playlist "{name}", Page {page}/{total_pages}:\n' + '\n'.join([f'**{str(int((page - 1) * MAX_DISPLAY_LENGTH) + i + 1)}. **' + truncate(n) for i, n in enumerate(names)])
-        )
-    
+        content=f'Successfully added "**{truncate(song.name)}**" to playlist "**{name}**"')
 
-@tree.command(name="playlist-show",
-              description="Shows all of the playlists available")
+
+@tree.command(name="playlist-view", description="Opens an interactive editor for a playlist")
+@app_commands.guild_only()
+@app_commands.describe(name='The name of the playlist', page='The page number (10 songs per page)')
+async def pl_view(interaction: discord.Interaction, name: str, page: int = 1) -> None:
+    await open_playlist_editor(interaction, name, page)
+
+
+@tree.command(name="playlist-show", description="Browse available playlists and open an editor")
+@app_commands.guild_only()
 async def pl_show(interaction: discord.Interaction) -> None:
-    guild_id = interaction.guild_id
-    await interaction.response.send_message("Processing...")
+    await open_playlist_editor(interaction)
 
-    path = [FILE_DIR, 'Guilds', str(guild_id), 'playlists']
-    os.makedirs(os.path.join(*path), exist_ok=True)
 
-    files = os.listdir(os.path.join(*path))
-    if len(files) == 0:
-        await interaction.edit_original_response(content='No playlists are available!')
-        return
-    await interaction.edit_original_response(content=f'Available playlists currently:\n' + '\n'.join([f'**{str(i + 1)}. **' + os.path.splitext(f)[0] for i, f in enumerate(files)]))
-
-@tree.command(name="playlist-remove",
-              description="Removes a specific song from a playlist with a given index")
-@app_commands.describe(name='The name of the playlist', 
-                       index='The index of the song you want to remove')
+@tree.command(name="playlist-remove", description="Removes a song from a playlist by its number")
+@app_commands.guild_only()
+@app_commands.describe(name='The name of the playlist', index='The song number, starting at 1')
 async def pl_remove(interaction: discord.Interaction, name: str, index: int) -> None:
-    guild_id = interaction.guild_id
-
-    if not name.isalnum():
-        await interaction.response.send_message("The name of the playlist must be alphanumeric!")
+    try:
+        snapshot = playlist_store.read(interaction.guild_id, name)
+        if not 1 <= index <= len(snapshot.songs):
+            raise PlaylistError('The song number is invalid!')
+        song = snapshot.songs[index - 1]
+        playlist_store.remove(interaction.guild_id, name, [index - 1], revision=snapshot.revision)
+    except PlaylistError as error:
+        await interaction.response.send_message(str(error))
         return
+    await interaction.response.send_message(
+        f'Successfully removed "{truncate(song.name)}" at index {index}!')
 
-    if len(name) > MAX_SONG_NAME_LENGTH:
-        await interaction.response.send_message(f"The name of the playlist can only be lesser than {MAX_SONG_NAME_LENGTH} characters!")
-        return
-
-    await interaction.response.send_message("Processing...")
-
-    path = [FILE_DIR, 'Guilds', str(guild_id), 'playlists']
-    os.makedirs(os.path.join(*path), exist_ok=True)
-
-    path += [f'{name}.csv']
-
-    if not os.path.isfile(os.path.join(*path)):
-        await interaction.edit_original_response(content=f'The playlist "{name}" does not exist!')
-        return
-
-    entries = []
-    with open(os.path.join(*path), 'r+') as f:
-        reader = csv.reader(f)
-        for row in reader:
-            entries.append(row)
-
-    if not 0 <= index < len(entries):
-        await interaction.edit_original_response(content=f'The index is invalid!')
-        return
-    
-    song_name, id, link = entries.pop(index)
-
-    if len(entries) > 1:
-        with open(os.path.join(*path), 'w+', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerows(entries)
-    else:
-        os.remove(os.path.join(*path))
-
-    await interaction.edit_original_response(content=f'Successfully removed "{truncate(song_name)}" at index {index}!')
 
 @to_thread
 def add_songs_to_queue(guild_id: int, songs: List[str]):
@@ -671,12 +626,16 @@ def add_songs_to_queue(guild_id: int, songs: List[str]):
             
             continue
 
+        finally:
+            queue.pending_songs -= 1
+
     task = client.loop.create_task(add_songs_to_queue(guild_id, songs[5:]))
     queue.tasks.append(task)
 
 
 @tree.command(name="playlist-enqueue",
               description="Enqueues the playlist with the given name in the current queue")
+@app_commands.guild_only()
 @app_commands.describe(name='The name of the playlist', 
                        shuffle='If the songs will be enqueued in random orders')
 async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool) -> None:
@@ -692,20 +651,12 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
 
     await interaction.response.send_message("Processing...")
 
-    path = [FILE_DIR, 'Guilds', str(guild_id), 'playlists']
-    os.makedirs(os.path.join(*path), exist_ok=True)
-
-    path += [f'{name}.csv']
-
-    if not os.path.isfile(os.path.join(*path)):
-        await interaction.edit_original_response(content=f'The playlist "{name}" does not exist!')
+    try:
+        snapshot = playlist_store.read(guild_id, name)
+    except PlaylistError as error:
+        await interaction.edit_original_response(content=str(error))
         return
-
-    entries = []
-    with open(os.path.join(*path), 'r+') as f:
-        reader = csv.reader(f)
-        for row in reader:
-            entries.append(row)
+    entries = [PlaylistStore.HEADER] + [[song.name, song.id, song.url] for song in snapshot.songs]
 
     voice = interaction.user.voice
 
@@ -718,7 +669,7 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
     text_channel = interaction.channel
 
     if len(entries) == 1:
-        logger.error(f'Only the header row exists for file "{name}.csv"!')
+        await interaction.edit_original_response(content=f'The playlist "{name}" is empty. Add songs with /playlist.')
         return
 
     if shuffle:
@@ -761,6 +712,9 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
             content=f'{error} | Failed to retrieve information from the link!')
         return
     
+    pending_count = len(entries) - 2
+    queue.pending_songs += pending_count
+
     try:
         if queue.voice_client is None:
             voice_client = await voice_channel.connect(timeout=VOICE_CALL_TIMEOUT,
@@ -772,6 +726,7 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
             await play_music(guild_id)
 
     except discord.ClientException as e:
+        queue.pending_songs -= pending_count
         await interaction.edit_original_response(content='Failed to play the music!')
         return
 
@@ -784,6 +739,19 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
     logger.info("Got out of add_songs_to_queue")
 
     await interaction.edit_original_response(content=f'Successfully enqueued {len(entries) - 1} songs!')
+
+
+@playlist.autocomplete('name')
+@pl_view.autocomplete('name')
+@pl_add.autocomplete('name')
+@pl_remove.autocomplete('name')
+@pl_enqueue.autocomplete('name')
+async def playlist_names(interaction: discord.Interaction, current: str):
+    if interaction.guild_id is None:
+        return []
+    return [app_commands.Choice(name=name, value=name)
+            for name in playlist_store.names(interaction.guild_id)
+            if current.casefold() in name.casefold()][:25]
 
 
 if __name__ == '__main__':

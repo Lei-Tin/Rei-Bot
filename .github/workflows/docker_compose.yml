@@ -21,6 +21,7 @@ jobs:
       AZURE_CORE_OUTPUT: none
     steps:
       - uses: actions/checkout@v7.0.1
+      - run: python3 -m pip install 'discord.py==2.7.1'
       - run: python3 -m unittest discover -s tests -v
       - uses: docker/setup-buildx-action@v4.3.0
       - uses: docker/login-action@v4.6.0

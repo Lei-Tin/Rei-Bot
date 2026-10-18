@@ -16,6 +16,7 @@ class Queue:
         self.urls = []
         self.youtube_urls = []
         self.current = ''
+        self.pending_songs = 0  # Playlist songs still being loaded.
         self.voice_channel = voice_channel
         self.text_channel = text_channel
         self.voice_client = None

@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rei-Bot · Playlist preview</title>
+<style>
+  :root { color-scheme: dark; font-family: "gg sans", "Noto Sans", "Helvetica Neue", Arial, sans-serif; color: #f2f3f5; background: #1e1f22; }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  button, input, textarea { font: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: .45; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid #00a8fc; outline-offset: 3px; }
+  header { max-width: 1000px; padding: 32px 28px 24px; margin: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+  header h1 { margin: 0 0 9px; font-size: 20px; font-weight: 600; }
+  header p { margin: 0; max-width: 650px; color: #b5bac1; font-size: 13px; line-height: 1.7; }
+  .open { background: #404249; color: #f2f3f5; border: 0; border-radius: 4px; padding: 10px 15px; font-size: 14px; white-space: nowrap; }
+  .open:hover { background: #4e5058; }
+  main { max-width: 944px; margin: 0 auto 30px; background: #313338; border: 1px solid #3f4147; border-radius: 8px; min-height: 650px; }
+  .channel { padding: 16px 24px; border-bottom: 1px solid #26272b; color: #b5bac1; font-size: 15px; }
+  .channel strong { color: #f2f3f5; font-weight: 500; }
+  .message { display: grid; grid-template-columns: 40px minmax(0, 1fr); column-gap: 16px; padding: 26px 24px 32px; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: #5865f2; display: grid; place-items: center; color: white; font-weight: 700; font-size: 23px; }
+  .author { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; line-height: 20px; font-size: 16px; }
+  .author strong { font-weight: 600; }
+  .app { background: #5865f2; color: #fff; padding: 0 4px; border-radius: 3px; font-size: 10px; font-weight: 600; line-height: 15px; }
+  .time { color: #949ba4; font-size: 12px; margin-left: 3px; }
+  .content { margin-bottom: 12px; font-size: 14px; line-height: 1.5; }
+  .content:empty { display: none; }
+  .embed { max-width: 520px; background: #2b2d31; border-left: 4px solid #5865f2; border-radius: 4px; padding: 16px; }
+  .embed h2 { font-size: 16px; line-height: 1.4; font-weight: 600; margin: 0 0 10px; overflow-wrap: anywhere; }
+  .description { font-size: 14px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .description strong { font-weight: 600; }
+  .field { margin-top: 14px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .field strong { display: block; margin-bottom: 4px; font-weight: 600; }
+  .footer { color: #b5bac1; font-size: 12px; line-height: 1.5; margin-top: 15px; }
+  .controls { max-width: 640px; margin-top: 8px; display: grid; gap: 8px; }
+  .action-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .discord-button { background: #4e5058; color: #fff; border: 0; border-radius: 4px; padding: 9px 16px; min-height: 32px; font-size: 14px; font-weight: 500; line-height: 16px; }
+  .discord-button:hover:not(:disabled) { background: #6d6f78; }
+  .discord-button.primary { background: #5865f2; }
+  .discord-button.primary:hover:not(:disabled) { background: #4752c4; }
+  .discord-button.danger { background: #da373c; }
+  .discord-button.danger:hover:not(:disabled) { background: #a12828; }
+  .select { width: 100%; max-width: 520px; background: #1e1f22; border-radius: 4px; position: relative; font-size: 14px; }
+  .select[aria-disabled="true"] { pointer-events: none; opacity: .45; }
+  .select summary { padding: 12px; color: #b5bac1; list-style: none; cursor: pointer; display: flex; gap: 12px; justify-content: space-between; }
+  .select summary::-webkit-details-marker { display: none; }
+  .select summary::after { content: "⌄"; }
+  .select summary span { overflow-wrap: anywhere; }
+  .select .options { position: absolute; z-index: 2; width: 100%; background: #2b2d31; padding: 6px; border: 1px solid #1e1f22; border-radius: 4px; max-height: 300px; overflow-y: auto; box-shadow: 0 6px 20px #0005; }
+  .option { display: flex; gap: 10px; padding: 10px; border-radius: 3px; align-items: center; cursor: pointer; width: 100%; font-size: 14px; line-height: 1.4; color: #f2f3f5; background: transparent; border: 0; text-align: left; }
+  .option:hover { background: #404249; }
+  .option span { overflow-wrap: anywhere; }
+  .option input { width: 17px; height: 17px; margin: 0; accent-color: #5865f2; flex-shrink: 0; }
+  .apply { margin: 7px; padding: 8px 12px; }
+  .private { margin-top: 14px; color: #949ba4; font-size: 12px; }
+  #notice { padding: 13px 16px; margin-top: 14px; background: #404249; border-radius: 4px; max-width: 520px; font-size: 14px; }
+  #notice:empty { display: none; }
+  dialog { width: min(460px, calc(100% - 32px)); color: #f2f3f5; background: #313338; border: 0; border-radius: 8px; padding: 0; box-shadow: 0 20px 60px #0008; }
+  dialog::backdrop { background: #000a; }
+  dialog h2 { font-size: 20px; margin: 0 0 25px; font-weight: 600; }
+  .modal-body { padding: 24px; }
+  .modal-body label { display: block; margin-bottom: 10px; color: #b5bac1; font-size: 12px; font-weight: 600; }
+  .modal-body input, .modal-body textarea { display: block; width: 100%; background: #1e1f22; border: 0; padding: 12px; border-radius: 3px; color: #f2f3f5; font-size: 14px; }
+  .modal-body textarea { min-height: 150px; resize: vertical; }
+  .modal-actions { padding: 16px 24px; background: #2b2d31; display: flex; gap: 12px; justify-content: flex-end; border-radius: 0 0 8px 8px; }
+  .modal-note { margin-top: 12px; color: #949ba4; font-size: 12px; line-height: 1.5; }
+  @media (max-width: 600px) { header { padding: 22px 16px; } main { border-radius: 0; border-left: 0; border-right: 0; } .message { padding: 22px 12px; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; } .avatar { width: 30px; height: 30px; font-size: 18px; } .discord-button { padding: 9px 11px; } .embed { padding: 12px; } }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Playlist 本地预览</h1><p>临时示例歌单 · 操作调用现有编辑代码 · 浏览器近似 Discord 样式<br>加歌只生成示例标题，不访问 YouTube。播放仍使用 /playlist-enqueue。</p></div>
+  <button class="open" id="open" type="button">重新打开 /playlist</button>
+</header>
+<main aria-label="Discord message preview">
+  <div class="channel">#&nbsp; <strong>playlist-preview</strong></div>
+  <div class="message">
+    <div class="avatar" aria-hidden="true">R</div>
+    <div>
+      <div class="author"><strong>Rei-Bot</strong><span class="app">APP</span><span class="time">Today</span></div>
+      <div id="content" class="content"></div>
+      <div id="embed" class="embed"></div>
+      <div id="controls" class="controls" aria-label="Playlist controls"></div>
+      <div class="private">Only you can see this · Dismiss message</div>
+      <div id="notice" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+</main>
+<dialog id="modal" aria-labelledby="modal-title">
+  <form id="modal-form">
+    <div class="modal-body"><h2 id="modal-title"></h2><div id="modal-fields"></div><div id="modal-note" class="modal-note"></div></div>
+    <div class="modal-actions"><button class="discord-button" id="cancel" type="button">Cancel</button><button class="discord-button primary" type="submit">Submit</button></div>
+  </form>
+</dialog>
+<script>
+const embed = document.getElementById('embed');
+const controls = document.getElementById('controls');
+const modal = document.getElementById('modal');
+let pending = false;
+
+function markdown(element, text) {
+  for (const line of String(text || '').split('\n')) {
+    const row = document.createElement('div');
+    const match = line.match(/^\*\*([^*]+)\*\*(.*)$/);
+    if (match) {
+      const strong = document.createElement('strong');
+      strong.textContent = match[1];
+      row.append(strong, document.createTextNode(match[2].replace(/\\([\\*_~`|>\[\]])/g, '$1')));
+    } else row.textContent = line.replace(/\\([\\*_~`|>\[\]])/g, '$1');
+    element.append(row);
+  }
+}
+
+function render(state) {
+  document.getElementById('content').textContent = state.content || '';
+  document.getElementById('notice').textContent = state.notice || '';
+  embed.replaceChildren();
+  embed.hidden = !state.embed;
+  if (state.embed) {
+    const data = state.embed;
+    embed.style.borderLeftColor = '#' + (data.color || 5793266).toString(16).padStart(6, '0');
+    const title = document.createElement('h2');
+    title.textContent = data.title || '';
+    const description = document.createElement('div');
+    description.className = 'description';
+    markdown(description, data.description);
+    embed.append(title, description);
+    for (const field of data.fields || []) {
+      const block = document.createElement('div');
+      block.className = 'field';
+      const name = document.createElement('strong');
+      name.textContent = field.name;
+      block.append(name, document.createTextNode(field.value));
+      embed.append(block);
+    }
+    const footer = document.createElement('div');
+    footer.className = 'footer';
+    footer.textContent = data.footer?.text || '';
+    embed.append(footer);
+  }
+  controls.replaceChildren();
+  for (const row of state.components) {
+    const element = document.createElement('div');
+    element.className = 'action-row';
+    for (const item of row.components) {
+      if (item.type === 2) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'discord-button' + (item.style === 1 ? ' primary' : item.style === 4 ? ' danger' : '');
+        button.textContent = item.label;
+        button.disabled = Boolean(item.disabled);
+        button.onclick = () => send({action: 'component', id: item.custom_id});
+        element.append(button);
+      } else if (item.type === 3) {
+        element.append(renderSelect(item));
+      }
+    }
+    controls.append(element);
+  }
+  if (state.modal) renderModal(state.modal);
+  else if (modal.open) modal.close();
+}
+
+function renderSelect(item) {
+  const details = document.createElement('details');
+  details.className = 'select';
+  details.setAttribute('aria-disabled', String(Boolean(item.disabled)));
+  const summary = document.createElement('summary');
+  const label = document.createElement('span');
+  const selected = item.options.filter(option => option.default);
+  label.textContent = selected.length ? selected.map(option => option.label).join(', ') : item.placeholder;
+  summary.append(label);
+  details.append(summary);
+  const options = document.createElement('div');
+  options.className = 'options';
+  const multiple = item.min_values === 0;
+  for (const option of item.options) {
+    const row = document.createElement(multiple ? 'label' : 'button');
+    row.className = 'option';
+    if (multiple) {
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = option.value;
+      checkbox.checked = Boolean(option.default);
+      checkbox.setAttribute('aria-label', option.label);
+      row.append(checkbox);
+    } else {
+      row.type = 'button';
+      row.onclick = () => send({action: 'component', id: item.custom_id, values: [option.value]});
+    }
+    const text = document.createElement('span');
+    text.textContent = option.label;
+    row.append(text);
+    options.append(row);
+  }
+  if (multiple) {
+    const apply = document.createElement('button');
+    apply.type = 'button';
+    apply.className = 'discord-button primary apply';
+    apply.textContent = 'Done';
+    apply.setAttribute('aria-label', 'Done');
+    apply.onclick = () => send({action: 'component', id: item.custom_id,
+      values: Array.from(options.querySelectorAll('input:checked'), input => input.value)});
+    options.append(apply);
+  }
+  details.append(options);
+  return details;
+}
+
+function renderModal(data) {
+  document.getElementById('modal-title').textContent = data.title;
+  document.getElementById('modal-note').textContent = data.title === 'Add songs' ? '本地预览不解析真实歌名；可粘贴任意歌曲链接测试操作。' : '';
+  const fields = document.getElementById('modal-fields');
+  fields.replaceChildren();
+  for (const label of data.components) {
+    const item = label.component || label.components?.[0];
+    if (!item) continue;
+    const caption = document.createElement('label');
+    caption.textContent = label.label || item.label;
+    caption.htmlFor = 'field-' + item.custom_id;
+    const input = document.createElement(item.style === 2 ? 'textarea' : 'input');
+    input.id = caption.htmlFor;
+    input.name = item.custom_id;
+    input.placeholder = item.placeholder || '';
+    input.required = item.required !== false;
+    if (item.max_length) input.maxLength = item.max_length;
+    if (item.min_length) input.minLength = item.min_length;
+    fields.append(caption, input);
+  }
+  if (!modal.open) modal.showModal();
+}
+
+async function send(payload) {
+  if (pending) return;
+  pending = true;
+  document.body.setAttribute('aria-busy', 'true');
+  try {
+    const response = await fetch('/interact', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Request failed');
+    render(data);
+  } catch (error) { document.getElementById('notice').textContent = error.message; }
+  finally { pending = false; document.body.removeAttribute('aria-busy'); }
+}
+
+document.getElementById('open').onclick = () => send({action: 'open'});
+document.getElementById('cancel').onclick = () => send({action: 'cancel_modal'});
+modal.addEventListener('cancel', event => { event.preventDefault(); send({action: 'cancel_modal'}); });
+document.getElementById('modal-form').onsubmit = event => {
+  event.preventDefault();
+  send({action: 'submit_modal', values: Object.fromEntries(new FormData(event.currentTarget))});
+};
+fetch('/state').then(response => response.json()).then(render).catch(error => {
+  document.getElementById('notice').textContent = '无法连接本地预览：' + error.message;
+});
+</script>
+</body>
+</html>

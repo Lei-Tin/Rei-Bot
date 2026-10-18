@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5] - 2026-10-18
+
+### Added
+
+- Added `/playlist [name]` to create and edit playlists with an embed, dropdown menus, buttons, and popups. Supports adding up to 10 song URLs at once, removing selected songs, moving songs, and browsing 10 songs per page.
+- Added a local playlist editor preview with temporary sample playlists.
+
+### Changed
+
+- `/playlist-show` and `/playlist-view [name] [page]` now open the playlist editor. `/playlist-enqueue [name] [shuffle]` is still used to enqueue a saved playlist.
+- Now playing messages no longer show a link preview and show the number of songs remaining, including playlist songs still being loaded.
+- Playlist changes are saved automatically. Removing the last song keeps an empty playlist.
+
+### Fixed
+
+- Videos opened inside a YouTube playlist add only the current video. Whole-playlist and channel links show a message asking for a video URL.
+- Failed or timed-out links do not prevent other valid songs from being added. The editor remains usable after an error and prevents duplicate submissions.
+- Refresh the playlist before removing or moving songs if another editor changed it, to prevent editing the wrong song.
+- Fixed `/playlist-remove` accepting index 0 and removing the CSV header.
+
 ## [1.4.1] - 2024-11-18
 
 ### Changed
