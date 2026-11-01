@@ -63,7 +63,9 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.bot.q.clear()
         self.voice = Voice()
-        self.channel = SimpleNamespace(members=[object(), object()], connect=AsyncMock(return_value=self.voice))
+        self.listener = SimpleNamespace(id=20, bot=False)
+        # Before connect(), the bot is not yet included in channel.members.
+        self.channel = SimpleNamespace(members=[self.listener], connect=AsyncMock(return_value=self.voice))
         self.text = SimpleNamespace(send=AsyncMock())
         self.event = self.interaction()
         self.source_factory = patch.object(self.bot.discord, 'FFmpegPCMAudio',
@@ -116,6 +118,64 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
         self.channel.connect.assert_awaited_once()
         self.assertEqual(self.voice.played, ['stream:A'])
         self.assertEqual(queue.songs, ['B'])
+
+    async def test_playlist_of_77_songs_joins_with_only_the_requester_in_voice(self):
+        songs = tuple(PlaylistSong(f'Song {i}', str(i), f'https://example.com/{i}') for i in range(77))
+        with patch.object(self.bot.playlist_store, 'read', return_value=SimpleNamespace(songs=songs)), \
+                patch.object(self.bot, 'extract_playback_song', side_effect=lambda guild, link: media_info(link.rsplit('/', 1)[1])):
+            await self.bot.pl_enqueue.callback(self.event, 'Favorites', False)
+            queue = self.bot.q[10]
+            self.assertIn('Enqueueing 77 songs', self.event.edit_original_response.call_args.kwargs['content'])
+            await self.until(lambda: not queue.tasks)
+        self.channel.connect.assert_awaited_once()
+        self.assertIs(self.bot.q[10], queue)
+        self.assertEqual(queue.current, '0')
+        self.assertEqual(self.voice.played, ['stream:0'])
+        self.assertEqual(len(queue.songs), 76)
+        self.assertEqual(queue.pending_songs, 0)
+
+    async def test_play_joins_voice_when_the_requester_is_the_only_listener(self):
+        with patch.object(self.bot, 'extract_playback_song', return_value=media_info('First')):
+            await self.bot.play.callback(self.event, 'https://example.com/first')
+        self.channel.connect.assert_awaited_once()
+        self.assertEqual(self.voice.played, ['stream:First'])
+        self.assertEqual(self.bot.q[10].current, 'First')
+
+    async def test_two_bots_do_not_count_as_listeners(self):
+        self.channel.members = [SimpleNamespace(bot=True), SimpleNamespace(bot=True)]
+        queue = self.queue('A')
+        queue.voice_client = None
+        await self.bot.play_music(10, queue)
+        self.channel.connect.assert_not_awaited()
+        self.assertEqual(self.voice.played, [])
+        self.assertNotIn(10, self.bot.q)
+        self.assertIn('no listeners', self.text.send.call_args.args[0])
+
+    async def test_listener_leaving_during_connect_does_not_start_audio(self):
+        queue = self.queue('A')
+        queue.voice_client = None
+
+        async def connect(**kwargs):
+            self.channel.members = [SimpleNamespace(bot=True)]
+            return self.voice
+
+        self.channel.connect.side_effect = connect
+        await self.bot.play_music(10, queue)
+        self.channel.connect.assert_awaited_once()
+        self.assertEqual(self.voice.played, [])
+        self.voice.disconnect.assert_awaited_once()
+        self.assertNotIn(10, self.bot.q)
+        self.assertIn('no listeners', self.text.send.call_args.args[0])
+
+    async def test_last_listener_leaving_stops_before_the_next_track(self):
+        queue = self.queue('A', 'B')
+        await self.bot.play_music(10, queue)
+        self.channel.members = [SimpleNamespace(bot=True)]
+        self.voice.finish()
+        await self.until(lambda: 10 not in self.bot.q)
+        self.assertEqual(self.voice.played, ['stream:A'])
+        self.voice.disconnect.assert_awaited_once()
+        self.assertIn('no listeners', self.text.send.call_args.args[0])
 
     async def test_empty_ready_queue_waits_for_pending_song_then_resumes(self):
         queue = self.queue('A', pending=1)

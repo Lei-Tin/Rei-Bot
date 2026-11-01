@@ -2,7 +2,7 @@
 The main file for the bot
 """
 # Change the version string every update
-version = 'v1.5.1 (Oct 18, 2026)'
+version = 'v1.5.2 (Oct 31, 2026)'
 
 import asyncio
 from ctypes.util import find_library
@@ -237,6 +237,17 @@ async def send_playback_message(queue: Queue, content: str, **kwargs) -> None:
         logger.warning('Could not send a playback message')
 
 
+async def stop_if_no_listeners(guild_id: int, queue: Queue) -> bool:
+    """Retire an unattended queue. The caller holds queue.lock."""
+    # The bot is absent from channel.members until connect() completes.
+    if any(not member.bot for member in queue.voice_channel.members):
+        return False
+    logger.info('Stopping playback in guild %s: no listeners remain', guild_id)
+    await close_queue_locked(guild_id, queue)
+    await send_playback_message(queue, 'Playback stopped because there are no listeners in the voice channel.')
+    return True
+
+
 async def play_music(guild_id: int, queue: Queue, *, finished=None, error=None) -> None:
     """The only playback transition. Queue state is changed exclusively on the event loop."""
     async with queue.lock:
@@ -261,8 +272,7 @@ async def play_music(guild_id: int, queue: Queue, *, finished=None, error=None) 
             if was_connected:
                 await send_playback_message(queue, 'Queue is now empty!')
             return
-        if len(queue.voice_channel.members) < 2:
-            await close_queue_locked(guild_id, queue)
+        if await stop_if_no_listeners(guild_id, queue):
             return
 
         source = None
@@ -271,6 +281,9 @@ async def play_music(guild_id: int, queue: Queue, *, finished=None, error=None) 
                 queue.voice_client = await track_queue_task(queue, queue.voice_channel.connect(
                     timeout=VOICE_CALL_TIMEOUT, reconnect=True, self_mute=True, self_deaf=True))
                 if not queue_is_active(guild_id, queue):
+                    return
+                # A listener can leave while the voice handshake is in progress.
+                if await stop_if_no_listeners(guild_id, queue):
                     return
             voice_client = queue.voice_client
             if not voice_client.is_connected():

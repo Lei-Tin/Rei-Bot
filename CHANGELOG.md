@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.2] - 2026-10-31
+
+### Fixed
+
+- Fixed `/playlist-enqueue` and `/play` clearing the queue before joining when only one listener is in voice. Check for a human listener instead of counting the bot before it connects.
+- Recheck listeners after connecting and report when playback stops because nobody is listening.
+
 ## [1.5.1] - 2026-10-18
 
 ### Added
