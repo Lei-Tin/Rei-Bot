@@ -1,4 +1,4 @@
-# Rei-Bot v1.5.6
+# Rei-Bot v1.5.7
 
 A Discord Bot that is used to play music
 
@@ -14,7 +14,7 @@ Written in Python, not configured for public usage. Currently hosted on Microsof
 - Does not support YouTube search query links
 - Does not support playing in multiple channels in the same server at the same time
 
-Song volume is matched with one fixed gain for each song, targeting -16 LUFS while leaving room for loud peaks. The song's own quiet and loud sections stay intact. Adjust `AUDIO_TARGET_LUFS` in `Rei/config.py` to change the target. No noise suppression or vocal filters are applied.
+Song volume is matched with one fixed gain for each song, targeting -16 LUFS while leaving room for loud peaks. The gain stays the same from beginning to end, so the song's own quiet and loud sections stay intact. Songs with very loud peaks may stay below the target to avoid clipping. Adjust `AUDIO_TARGET_LUFS` in `Rei/config.py` to change the target. No noise suppression or vocal filters are applied.
 
 The first play measures the whole song before audio starts. Measurements are saved in `Rei/Guilds/audio_loudness.csv`, on the existing persistent volume in Azure, and reused after restarting. The cache stores loudness and peak measurements, so changing the target does not require another scan. Different audio formats are measured separately; temporary playback URLs are fetched again each time. If measurement fails or takes longer than 90 seconds, the song plays at its original volume. Live streams and sources without a known duration also keep their original volume.
 
@@ -46,7 +46,7 @@ Use "/playlist" to choose a playlist or create a new one. The editor shows 10 so
 
 Changes are saved automatically. Removing the last song keeps an empty playlist. Editing a playlist does not change the songs already in the queue; use "/playlist-enqueue" to enqueue the saved playlist.
 
-Playlist songs load in the background. The bot prepares the first song, then joins voice and starts playing. It prepares up to two upcoming songs instead of processing the whole playlist at once. If the next song is still loading, the bot waits for it. Failed songs are skipped, and "/clear" cancels the loading queue as well.
+Playlist songs load in the background. The bot starts joining voice immediately while preparing the first song, then starts playing as soon as both are ready. It prepares up to two upcoming songs instead of processing the whole playlist at once. If the next song is still loading, the bot waits for it. Failed songs are skipped, and "/clear" cancels the loading queue as well.
 
 Note: **DOES NOT SUPPORT** importing whole YouTube playlists or channels. A video link with a playlist attached (`watch?v=...&list=...`) adds only that video. If a link fails or times out, the editor shows which line failed and still adds the other valid songs.
 

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.7] - 2026-11-04
+
+### Changed
+
+- Start joining voice while preparing the first song again, using the native voice client. Concurrent requests share one connection; clearing or failing the queue cancels an unfinished connection.
+- Keep one fixed gain per song, targeting -16 LUFS with peak headroom, cached measurements, and preparation of two upcoming playlist songs.
+
 ## [1.5.6] - 2026-11-04
 
 ### Fixed
