@@ -1,4 +1,4 @@
-# Rei-Bot v1.5.3
+# Rei-Bot v1.5.4
 
 A Discord Bot that is used to play music
 
@@ -46,7 +46,7 @@ Use "/playlist" to choose a playlist or create a new one. The editor shows 10 so
 
 Changes are saved automatically. Removing the last song keeps an empty playlist. Editing a playlist does not change the songs already in the queue; use "/playlist-enqueue" to enqueue the saved playlist.
 
-Playlist songs load in the background. The bot joins voice while the first song is loading, then starts playing when it is ready. If the next song is still loading, the bot waits for it. Failed songs are skipped, and "/clear" cancels the loading queue as well.
+Playlist songs load in the background. The bot joins voice while the first song is loading, then starts playing when it is ready. It prepares up to two upcoming songs instead of processing the whole playlist at once. If the next song is still loading, the bot waits for it. Failed songs are skipped, and "/clear" cancels the loading queue as well.
 
 Note: **DOES NOT SUPPORT** importing whole YouTube playlists or channels. A video link with a playlist attached (`watch?v=...&list=...`) adds only that video. If a link fails or times out, the editor shows which line failed and still adds the other valid songs.
 

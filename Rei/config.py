@@ -10,6 +10,8 @@ DOWNLOAD = False
 
 VOICE_CALL_TIMEOUT = 60
 SONG_LOAD_TIMEOUT = 45
+AUDIO_START_TIMEOUT = 15
+PRELOAD_SONGS = 2
 
 # Match perceived volume between songs. Set to False to keep the source's volume.
 NORMALIZE_AUDIO = True

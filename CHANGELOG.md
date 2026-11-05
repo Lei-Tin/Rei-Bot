@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.4] - 2026-11-04
+
+### Fixed
+
+- Join voice without self-muting, so the bot can be heard while playing.
+- Check the first audio frame before announcing playback. Skip songs that return no audio or time out, and clean up preparation when the queue is cleared.
+- Limit background playlist preparation to two upcoming songs and run loudness scans at a lower CPU priority, leaving more resources for playback.
+
 ## [1.5.3] - 2026-11-04
 
 ### Added

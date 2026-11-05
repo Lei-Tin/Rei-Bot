@@ -2,9 +2,10 @@
 The main file for the bot
 """
 # Change the version string every update
-version = 'v1.5.3 (Nov 4, 2026)'
+version = 'v1.5.4 (Nov 4, 2026)'
 
 import asyncio
+from contextlib import asynccontextmanager
 from ctypes.util import find_library
 
 from typing import Union
@@ -15,7 +16,7 @@ from utils import truncate
 from playlists import PlaylistError, PlaylistSong, PlaylistStore
 from playlist_links import PLAYLIST_LINK_MESSAGE, normalize_song_url
 from playlist_ui import PlaylistEditor
-from playback_audio import playback_audio_options
+from playback_audio import BufferedPCMSource, playback_audio_options
 from loudness import LoudnessCache, TrackNormalizer
 
 import discord
@@ -159,6 +160,7 @@ async def close_queue_locked(guild_id: int, queue: Queue) -> None:
         return
     queue.closed = True
     queue.playing = False
+    queue.starting = False
     queue.playback_token = None
     queue.current = ''
     queue.pending_songs = 0
@@ -167,6 +169,7 @@ async def close_queue_locked(guild_id: int, queue: Queue) -> None:
     queue.urls.clear()
     queue.youtube_urls.clear()
     queue.gains.clear()
+    queue.preload_changed.set()
     for task in tuple(queue.tasks):
         if task is not asyncio.current_task() and not task.cancelling():
             task.cancel()
@@ -225,6 +228,33 @@ def append_song(queue: Queue, info: dict) -> None:
     queue.gains.append(info.get('gain_db', 0.0))
 
 
+def take_next_song(queue: Queue):
+    song = queue.songs.pop(0)
+    queue.ids.pop(0)
+    queue.urls.pop(0)
+    original_link = queue.youtube_urls.pop(0)
+    queue.gains.pop(0)
+    queue.preload_changed.set()
+    return song, original_link
+
+
+@asynccontextmanager
+async def preload_slot(guild_id: int, queue: Queue):
+    while queue_is_active(guild_id, queue):
+        if len(queue.songs) + queue.preparing_songs < PRELOAD_SONGS:
+            queue.preparing_songs += 1
+            break
+        queue.preload_changed.clear()
+        await queue.preload_changed.wait()
+    else:
+        raise asyncio.CancelledError
+    try:
+        yield
+    finally:
+        queue.preparing_songs -= 1
+        queue.preload_changed.set()
+
+
 async def announce_now_playing(queue: Queue, song: str, original_link: str) -> None:
     remaining = len(queue.songs) + queue.pending_songs
     noun = 'song' if remaining == 1 else 'songs'
@@ -264,7 +294,7 @@ async def connect_voice_locked(guild_id: int, queue: Queue) -> bool:
             return queue.voice_client
 
         queue.voice_client = await track_queue_task(queue, queue.voice_channel.connect(
-            timeout=VOICE_CALL_TIMEOUT, reconnect=True, self_mute=True, self_deaf=True, cls=voice_factory))
+            timeout=VOICE_CALL_TIMEOUT, reconnect=True, self_mute=False, self_deaf=True, cls=voice_factory))
         if not queue_is_active(guild_id, queue) or await stop_if_no_listeners(guild_id, queue):
             return False
     if not queue.voice_client.is_connected():
@@ -287,7 +317,7 @@ async def prepare_voice(guild_id: int, queue: Queue) -> None:
 async def play_music(guild_id: int, queue: Queue, *, finished=None, error=None) -> None:
     """The only playback transition. Queue state is changed exclusively on the event loop."""
     if finished is None and queue_is_active(guild_id, queue):
-        if queue.playing or (not queue.songs and queue.pending_songs):
+        if queue.playing or queue.starting or (not queue.songs and queue.pending_songs):
             return
         if not queue.songs:
             # All media failed: cancel a pending handshake instead of waiting for it.
@@ -319,10 +349,16 @@ async def play_music(guild_id: int, queue: Queue, *, finished=None, error=None) 
                 await send_playback_message(queue, 'Queue is now empty!')
             return
         source = None
+        connected = False
         try:
             if not await connect_voice_locked(guild_id, queue):
                 return
             voice_client = queue.voice_client
+            connected = True
+            queue.starting = True
+            source_url, gain_db = queue.urls[0], queue.gains[0]
+            # Reserve the track before awaiting audio; /remove can edit the upcoming songs.
+            song, original_link = take_next_song(queue)
 
             loop = asyncio.get_running_loop()
             token = object()
@@ -338,24 +374,40 @@ async def play_music(guild_id: int, queue: Queue, *, finished=None, error=None) 
                 except RuntimeError:
                     pass  # The process's event loop has already shut down.
 
-            source = discord.FFmpegPCMAudio(queue.urls[0], **playback_audio_options(
-                download=DOWNLOAD, gain_db=queue.gains[0]))
+            source = discord.FFmpegPCMAudio(source_url, **playback_audio_options(
+                download=DOWNLOAD, gain_db=gain_db))
+            # AudioPlayer sets its speaking indicator before read(). Check data first.
+            first_frame = await asyncio.wait_for(
+                track_queue_task(queue, asyncio.to_thread(source.read)), timeout=AUDIO_START_TIMEOUT)
+            if not first_frame:
+                raise RuntimeError('FFmpeg returned no audio frames')
+            if not queue_is_active(guild_id, queue):
+                await asyncio.to_thread(source.cleanup)
+                return
+            source = BufferedPCMSource(source, first_frame)
             voice_client.play(source, after=after)
-            song = queue.songs.pop(0)
-            queue.ids.pop(0)
-            queue.urls.pop(0)
-            original_link = queue.youtube_urls.pop(0)
-            queue.gains.pop(0)
             queue.current = song
             queue.playing = True
             queue.playback_token = token
+            logger.info('Started audio in guild %s: first frame %s bytes, gain %.2f dB',
+                        guild_id, len(first_frame), gain_db)
+        except asyncio.CancelledError:
+            if source is not None:
+                await asyncio.to_thread(source.cleanup)
+            raise
         except Exception:
             if source is not None:
-                source.cleanup()
+                await asyncio.to_thread(source.cleanup)
             logger.exception('Could not start audio in guild %s', guild_id)
-            await close_queue_locked(guild_id, queue)
-            await send_playback_message(queue, 'Failed to play the music. Please try again.')
+            if connected and queue_is_active(guild_id, queue):
+                await send_playback_message(queue, f'Could not read audio for "{truncate(song)}". Skipping this song.')
+                track_queue_task(queue, play_music(guild_id, queue))
+            else:
+                await close_queue_locked(guild_id, queue)
+                await send_playback_message(queue, 'Failed to play the music. Please try again.')
             return
+        finally:
+            queue.starting = False
         await announce_now_playing(queue, song, original_link)
 
 
@@ -504,6 +556,7 @@ async def remove(interaction: discord.Interaction, index: int) -> None:
     queue.urls.pop(index - 1)
     queue.youtube_urls.pop(index - 1)
     queue.gains.pop(index - 1)
+    queue.preload_changed.set()
     await interaction.edit_original_response(
         content=f'Successfully removed "{song}" at index **{index}**!')
 
@@ -659,16 +712,16 @@ async def add_songs_to_queue(guild_id: int, queue: Queue, songs) -> None:
             if not queue_is_active(guild_id, queue):
                 return
             try:
-                info = await load_playback_song(guild_id, song.url)
+                async with preload_slot(guild_id, queue):
+                    info = await load_playback_song(guild_id, song.url)
+                    if not queue_is_active(guild_id, queue):
+                        return
+                    append_song(queue, info)
             except Exception as error:
                 if not isinstance(error, (PlaylistError, asyncio.TimeoutError)):
                     logger.exception('Could not load playlist audio in guild %s', guild_id)
                 if queue_is_active(guild_id, queue):
                     await send_playback_message(queue, f'Failed to load "{truncate(song.name)}". Skipping this song.')
-            else:
-                if not queue_is_active(guild_id, queue):
-                    return
-                append_song(queue, info)
             finally:
                 if queue_is_active(guild_id, queue):
                     queue.pending_songs -= 1

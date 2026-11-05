@@ -20,10 +20,13 @@ class Queue:
         self.gains = []
         self.current = ''
         self.pending_songs = 0  # Playlist songs still being loaded.
+        self.preparing_songs = 0
+        self.preload_changed = asyncio.Event()
         self.voice_channel = voice_channel
         self.text_channel = text_channel
         self.voice_client = None
         self.playing = False
+        self.starting = False
         # Playback state belongs to the event loop; threads only return media information.
         self.lock = asyncio.Lock()
         self.closed = False

@@ -8,6 +8,7 @@ import math
 import os
 import re
 import shlex
+import shutil
 import tempfile
 import threading
 from dataclasses import dataclass
@@ -106,7 +107,9 @@ class LoudnessCache:
 
 
 async def measure_audio(source: str, *, download=False) -> LoudnessMeasurement | None:
-    args = ['ffmpeg', '-hide_banner', '-nostdin', '-nostats']
+    args = ['ffmpeg', '-hide_banner', '-nostdin', '-nostats', '-threads', '1', '-filter_threads', '1']
+    if shutil.which('nice'):
+        args = ['nice', '-n', '10', *args]
     if not download:
         args.extend(shlex.split(config.FFMPEG_OPTIONS.get('before_options', '')))
     # Measure the decoded stereo signal; loudnorm is used for analysis only, never for playback.
