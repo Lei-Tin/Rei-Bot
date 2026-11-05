@@ -1,4 +1,4 @@
-# Rei-Bot v1.5.5
+# Rei-Bot v1.5.6
 
 A Discord Bot that is used to play music
 
@@ -60,6 +60,7 @@ It is tested to run perfectly on Windows 11, Mac OS Ventura 13.4, Alpine Linux.
 
 - Python 3.11.4
 - discord.py 2.7.1
+- davey 0.1.7 (voice encryption)
 - yt-dlp (latest stable release in Docker)
 - ffmpeg 6.0
 - PyNaCl 1.5.0
@@ -70,7 +71,7 @@ It is tested to run perfectly on Windows 11, Mac OS Ventura 13.4, Alpine Linux.
 To install the test dependency and run the tests:
 
 ```sh
-python3 -m pip install 'discord.py==2.7.1'
+python3 -m pip install 'discord.py[voice]==2.7.1' 'davey==0.1.7'
 python3 -m unittest discover -s tests -v
 ```
 

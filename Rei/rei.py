@@ -2,7 +2,7 @@
 The main file for the bot
 """
 # Change the version string every update
-version = 'v1.5.5 (Nov 4, 2026)'
+version = 'v1.5.6 (Nov 4, 2026)'
 
 import asyncio
 from contextlib import asynccontextmanager

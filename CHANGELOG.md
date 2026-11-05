@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.6] - 2026-11-04
+
+### Fixed
+
+- Pin the Discord voice encryption dependency to `davey==0.1.7`, matching the working v1.5.1 and v1.5.2 images. New builds had silently picked up 0.2.0 through `discord.py[voice]`.
+- Install the same voice dependencies in CI and check dependency compatibility during tests and image builds.
+
 ## [1.5.5] - 2026-11-04
 
 ### Changed
