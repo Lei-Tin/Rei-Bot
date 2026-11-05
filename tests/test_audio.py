@@ -89,6 +89,20 @@ class AudioTests(unittest.TestCase):
         stats = self.measure(self.play(self.tone('download', .04), download=True))
         self.assertAlmostEqual(float(stats['input_i']), config.AUDIO_TARGET_LUFS, delta=1)
 
+    def test_discord_opus_encoding_preserves_matched_loudness(self):
+        try:
+            encoder = discord.opus.Encoder()
+            decoder = discord.opus.Decoder()
+        except discord.opus.OpusNotLoaded:
+            self.skipTest('Install libopus to check Discord encoding')
+        pcm = self.play(self.tone('opus', .4))
+        decoded = b''.join(decoder.decode(encoder.encode(pcm[i:i + encoder.FRAME_SIZE],
+            encoder.SAMPLES_PER_FRAME)) for i in range(0, len(pcm), encoder.FRAME_SIZE))
+        self.assertEqual(len(decoded), len(pcm))
+        self.assertNotEqual(set(decoded), {0})
+        before, after = self.measure(pcm), self.measure(decoded)
+        self.assertAlmostEqual(float(before['input_i']), float(after['input_i']), delta=.3)
+
     def test_silence_remains_silent(self):
         pcm = self.play(self.tone('silence', 0, seconds=2))
         self.assertTrue(pcm)

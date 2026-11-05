@@ -94,6 +94,9 @@ class LoudnessCacheTests(unittest.TestCase):
 
 class TrackNormalizerTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        normalization = patch.object(config, 'NORMALIZE_AUDIO', True)
+        normalization.start()
+        self.addCleanup(normalization.stop)
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.cache = LoudnessCache(Path(self.folder.name) / 'audio_loudness.csv')

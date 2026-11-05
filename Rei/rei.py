@@ -90,6 +90,7 @@ async def on_ready() -> None:
 
     logger.info('Rei Bot is ready!')
     logger.info(f'Version: {version}')
+    logger.info('Audio normalization: %s; target: %s LUFS', NORMALIZE_AUDIO, AUDIO_TARGET_LUFS)
     Path('/tmp/reibot-ready').touch()
 
 
@@ -294,7 +295,7 @@ async def connect_voice_locked(guild_id: int, queue: Queue) -> bool:
             return queue.voice_client
 
         queue.voice_client = await track_queue_task(queue, queue.voice_channel.connect(
-            timeout=VOICE_CALL_TIMEOUT, reconnect=True, self_mute=False, self_deaf=True, cls=voice_factory))
+            timeout=VOICE_CALL_TIMEOUT, reconnect=True, self_mute=True, self_deaf=True, cls=voice_factory))
         if not queue_is_active(guild_id, queue) or await stop_if_no_listeners(guild_id, queue):
             return False
     if not queue.voice_client.is_connected():

@@ -14,9 +14,9 @@ Written in Python, not configured for public usage. Currently hosted on Microsof
 - Does not support YouTube search query links
 - Does not support playing in multiple channels in the same server at the same time
 
-Song volume is matched with one fixed gain for each song, targeting -16 LUFS while leaving room for loud peaks. The song's own quiet and loud sections stay intact. Set `NORMALIZE_AUDIO = False` in `Rei/config.py` to keep the original volume, or adjust `AUDIO_TARGET_LUFS` to change the target. No noise suppression or vocal filters are applied.
+Automatic volume matching is temporarily disabled while checking silent playback. Set `NORMALIZE_AUDIO = True` in `Rei/config.py` to enable it again. It uses one fixed gain for each song, targeting -16 LUFS while leaving room for loud peaks. The song's own quiet and loud sections stay intact. Adjust `AUDIO_TARGET_LUFS` to change the target. No noise suppression or vocal filters are applied.
 
-The first play measures the whole song before audio starts. Measurements are saved in `Rei/Guilds/audio_loudness.csv`, on the existing persistent volume in Azure, and reused after restarting. The cache stores loudness and peak measurements, so changing the target does not require another scan. Different audio formats are measured separately; temporary playback URLs are fetched again each time. If measurement fails or takes longer than 90 seconds, the song plays at its original volume. Live streams and sources without a known duration also keep their original volume.
+When volume matching is enabled, the first play measures the whole song before audio starts. Measurements are saved in `Rei/Guilds/audio_loudness.csv`, on the existing persistent volume in Azure, and reused after restarting. The cache stores loudness and peak measurements, so changing the target does not require another scan. Different audio formats are measured separately; temporary playback URLs are fetched again each time. If measurement fails or takes longer than 90 seconds, the song plays at its original volume. Live streams and sources without a known duration also keep their original volume.
 
 # Commands
 

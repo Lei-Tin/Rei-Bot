@@ -119,7 +119,7 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
         queue.voice_client = None
         await asyncio.gather(*(self.bot.play_music(10, queue) for _ in range(5)))
         self.channel.connect.assert_awaited_once()
-        self.assertFalse(self.channel.connect.call_args.kwargs['self_mute'])
+        self.assertTrue(self.channel.connect.call_args.kwargs['self_mute'])
         self.assertTrue(self.channel.connect.call_args.kwargs['self_deaf'])
         self.assertEqual(self.voice.played, ['stream:A'])
         self.assertEqual(queue.songs, [])

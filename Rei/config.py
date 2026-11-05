@@ -14,7 +14,8 @@ AUDIO_START_TIMEOUT = 15
 PRELOAD_SONGS = 2
 
 # Match perceived volume between songs. Set to False to keep the source's volume.
-NORMALIZE_AUDIO = True
+# Temporarily use source volume to diagnose silent playback.
+NORMALIZE_AUDIO = False
 AUDIO_TARGET_LUFS = -16
 AUDIO_TRUE_PEAK_DBTP = -1.5
 AUDIO_MEASUREMENT_TIMEOUT = 90
