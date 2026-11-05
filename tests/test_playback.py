@@ -361,7 +361,8 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
             await self.bot.play.callback(self.event, 'https://example.com/A')
         self.assertNotIn(10, self.bot.q)
         self.assertEqual(self.voice.played, [])
-        self.assertIn('disconnected', self.event.edit_original_response.call_args.kwargs['content'])
+        # The handshake can fail before or after the extraction worker returns.
+        self.assertRegex(self.event.edit_original_response.call_args.kwargs['content'], 'stopped|disconnected')
         self.assertTrue(any('Failed to connect' in call.args[0] for call in self.text.send.call_args_list))
 
     async def test_manual_loader_cancellation_releases_only_its_pending_count(self):

@@ -21,6 +21,9 @@ jobs:
       AZURE_CORE_OUTPUT: none
     steps:
       - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: '3.12'
       - name: Install test dependencies
         run: |
           python3 -m pip install 'discord.py==2.7.1'
