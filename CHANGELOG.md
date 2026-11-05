@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.5] - 2026-11-04
+
+### Changed
+
+- Restore the native voice connection and direct FFmpeg playback flow: prepare the first song, then connect and play. Keep fixed song gain, cached loudness measurements, and preparation of two upcoming playlist songs.
+- Apply automatic volume matching without a separate enable/disable switch. Remove temporary playback diagnostics.
+
 ## [1.5.4] - 2026-11-04
 
 ### Fixed

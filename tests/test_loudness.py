@@ -94,9 +94,6 @@ class LoudnessCacheTests(unittest.TestCase):
 
 class TrackNormalizerTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        normalization = patch.object(config, 'NORMALIZE_AUDIO', True)
-        normalization.start()
-        self.addCleanup(normalization.stop)
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.cache = LoudnessCache(Path(self.folder.name) / 'audio_loudness.csv')
@@ -141,12 +138,10 @@ class TrackNormalizerTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(self.cache, 'put', side_effect=OSError()), self.assertLogs('loudness', level='WARNING'):
             self.assertEqual(await self.normalizer.gain_for(self.info), 4)
 
-    async def test_live_unknown_duration_and_disabled_normalization_do_not_scan(self):
+    async def test_live_and_unknown_duration_do_not_scan(self):
         with patch('loudness.measure_audio', AsyncMock()) as measure:
             for info in (track(is_live=True), track(duration=None), track(duration=math.inf)):
                 self.assertEqual(await self.normalizer.gain_for(info), 0)
-            with patch.object(config, 'NORMALIZE_AUDIO', False):
-                self.assertEqual(await self.normalizer.gain_for(self.info), 0)
         measure.assert_not_called()
         self.assertFalse(self.cache.path.exists())
 

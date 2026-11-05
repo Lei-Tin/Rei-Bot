@@ -11,7 +11,6 @@ import tempfile
 import unittest
 import wave
 from pathlib import Path
-from unittest.mock import patch
 
 import discord
 
@@ -45,8 +44,7 @@ class AudioTests(unittest.TestCase):
 
     def play(self, path, *, normalize=True, download=False):
         measurement = asyncio.run(measure_audio(str(path), download=True)) if normalize else None
-        with patch.object(config, 'NORMALIZE_AUDIO', normalize):
-            options = playback_audio_options(download=download, gain_db=fixed_gain_db(measurement))
+        options = playback_audio_options(download=download, gain_db=fixed_gain_db(measurement))
         # Fixtures are local WAVs. HTTP reconnect flags apply only to the live input transport.
         options.pop('before_options', None)
         source = discord.FFmpegPCMAudio(str(path), stderr=subprocess.DEVNULL, **options)

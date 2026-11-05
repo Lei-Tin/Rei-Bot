@@ -26,7 +26,6 @@ class Queue:
         self.text_channel = text_channel
         self.voice_client = None
         self.playing = False
-        self.starting = False
         # Playback state belongs to the event loop; threads only return media information.
         self.lock = asyncio.Lock()
         self.closed = False

@@ -175,7 +175,7 @@ class TrackNormalizer:
 
     async def gain_for(self, info: dict, *, download=False) -> float:
         duration = info.get('duration')
-        if (not config.NORMALIZE_AUDIO or info.get('is_live')
+        if (info.get('is_live')
                 or not isinstance(duration, (int, float)) or not math.isfinite(duration) or duration <= 0):
             return 0.0
         try:
