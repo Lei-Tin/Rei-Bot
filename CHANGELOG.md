@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.3] - 2026-11-04
+
+### Added
+
+- Cache whole-track loudness and true-peak measurements in `Rei/Guilds/audio_loudness.csv`, on the existing persistent volume. Reuse measurements across restarts and changes to the loudness target.
+
+### Changed
+
+- Start joining voice while the first song is being resolved for `/play` and `/playlist-enqueue`. Concurrent requests reuse the connection.
+- Replace dynamic volume adjustment with one fixed gain per song, preserving quiet introductions and louder sections. Limit gain to leave peak headroom.
+
+### Fixed
+
+- Cancel unfinished voice connections when loading fails or the queue is cleared, and disconnect partially connected clients during cleanup.
+- Cancel FFmpeg measurement when a queue is cleared. Measurement failures, timeouts, or cache errors do not prevent playback; unmeasured tracks keep their original volume.
+
 ## [1.5.2] - 2026-10-31
 
 ### Fixed

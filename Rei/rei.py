@@ -2,7 +2,7 @@
 The main file for the bot
 """
 # Change the version string every update
-version = 'v1.5.2 (Oct 31, 2026)'
+version = 'v1.5.3 (Nov 4, 2026)'
 
 import asyncio
 from ctypes.util import find_library
@@ -16,6 +16,7 @@ from playlists import PlaylistError, PlaylistSong, PlaylistStore
 from playlist_links import PLAYLIST_LINK_MESSAGE, normalize_song_url
 from playlist_ui import PlaylistEditor
 from playback_audio import playback_audio_options
+from loudness import LoudnessCache, TrackNormalizer
 
 import discord
 from discord import app_commands
@@ -43,6 +44,7 @@ intents = discord.Intents.default()
 
 FILE_DIR = os.path.dirname(os.path.realpath(__file__))
 playlist_store = PlaylistStore(Path(FILE_DIR) / 'Guilds')
+track_normalizer = TrackNormalizer(LoudnessCache(Path(FILE_DIR) / 'Guilds' / 'audio_loudness.csv'))
 
 if os.path.isfile(os.path.join(FILE_DIR, 'discord_token')):
     with open(os.path.join(FILE_DIR, 'discord_token')) as f:
@@ -164,8 +166,9 @@ async def close_queue_locked(guild_id: int, queue: Queue) -> None:
     queue.ids.clear()
     queue.urls.clear()
     queue.youtube_urls.clear()
+    queue.gains.clear()
     for task in tuple(queue.tasks):
-        if task is not asyncio.current_task():
+        if task is not asyncio.current_task() and not task.cancelling():
             task.cancel()
     try:
         if queue.voice_client is not None:
@@ -189,7 +192,8 @@ async def close_queue(guild_id: int, queue: Queue) -> None:
         tasks = tuple(task for task in queue.tasks if task is not asyncio.current_task())
         queue.closed = True
         for task in tasks:
-            task.cancel()
+            if not task.cancelling():
+                task.cancel()
         async with queue.lock:
             await close_queue_locked(guild_id, queue)
     if tasks:
@@ -218,6 +222,7 @@ def append_song(queue: Queue, info: dict) -> None:
     queue.ids.append(info['id'])
     queue.youtube_urls.append(info['webpage_url'])
     queue.urls.append(info['url'])
+    queue.gains.append(info.get('gain_db', 0.0))
 
 
 async def announce_now_playing(queue: Queue, song: str, original_link: str) -> None:
@@ -248,8 +253,49 @@ async def stop_if_no_listeners(guild_id: int, queue: Queue) -> bool:
     return True
 
 
+async def connect_voice_locked(guild_id: int, queue: Queue) -> bool:
+    """Connect once while holding queue.lock, independently of media extraction."""
+    if not queue_is_active(guild_id, queue) or await stop_if_no_listeners(guild_id, queue):
+        return False
+    if queue.voice_client is None:
+        def voice_factory(client, channel):
+            # Keep the partially connected client so /clear can fully disconnect it.
+            queue.voice_client = discord.VoiceClient(client, channel)
+            return queue.voice_client
+
+        queue.voice_client = await track_queue_task(queue, queue.voice_channel.connect(
+            timeout=VOICE_CALL_TIMEOUT, reconnect=True, self_mute=True, self_deaf=True, cls=voice_factory))
+        if not queue_is_active(guild_id, queue) or await stop_if_no_listeners(guild_id, queue):
+            return False
+    if not queue.voice_client.is_connected():
+        raise discord.ClientException('Not connected to voice.')
+    return True
+
+
+async def prepare_voice(guild_id: int, queue: Queue) -> None:
+    async with queue.lock:
+        if not queue_is_active(guild_id, queue):
+            return
+        try:
+            await connect_voice_locked(guild_id, queue)
+        except Exception:
+            logger.exception('Could not connect to voice in guild %s', guild_id)
+            await close_queue_locked(guild_id, queue)
+            await send_playback_message(queue, 'Failed to connect to the voice channel. Please try again.')
+
+
 async def play_music(guild_id: int, queue: Queue, *, finished=None, error=None) -> None:
     """The only playback transition. Queue state is changed exclusively on the event loop."""
+    if finished is None and queue_is_active(guild_id, queue):
+        if queue.playing or (not queue.songs and queue.pending_songs):
+            return
+        if not queue.songs:
+            # All media failed: cancel a pending handshake instead of waiting for it.
+            was_connected = queue.voice_client is not None
+            await close_queue(guild_id, queue)
+            if was_connected:
+                await send_playback_message(queue, 'Queue is now empty!')
+            return
     async with queue.lock:
         if not queue_is_active(guild_id, queue):
             return
@@ -272,22 +318,11 @@ async def play_music(guild_id: int, queue: Queue, *, finished=None, error=None) 
             if was_connected:
                 await send_playback_message(queue, 'Queue is now empty!')
             return
-        if await stop_if_no_listeners(guild_id, queue):
-            return
-
         source = None
         try:
-            if queue.voice_client is None:
-                queue.voice_client = await track_queue_task(queue, queue.voice_channel.connect(
-                    timeout=VOICE_CALL_TIMEOUT, reconnect=True, self_mute=True, self_deaf=True))
-                if not queue_is_active(guild_id, queue):
-                    return
-                # A listener can leave while the voice handshake is in progress.
-                if await stop_if_no_listeners(guild_id, queue):
-                    return
+            if not await connect_voice_locked(guild_id, queue):
+                return
             voice_client = queue.voice_client
-            if not voice_client.is_connected():
-                raise discord.ClientException('Not connected to voice.')
 
             loop = asyncio.get_running_loop()
             token = object()
@@ -303,12 +338,14 @@ async def play_music(guild_id: int, queue: Queue, *, finished=None, error=None) 
                 except RuntimeError:
                     pass  # The process's event loop has already shut down.
 
-            source = discord.FFmpegPCMAudio(queue.urls[0], **playback_audio_options(download=DOWNLOAD))
+            source = discord.FFmpegPCMAudio(queue.urls[0], **playback_audio_options(
+                download=DOWNLOAD, gain_db=queue.gains[0]))
             voice_client.play(source, after=after)
             song = queue.songs.pop(0)
             queue.ids.pop(0)
             queue.urls.pop(0)
             original_link = queue.youtube_urls.pop(0)
+            queue.gains.pop(0)
             queue.current = song
             queue.playing = True
             queue.playback_token = token
@@ -323,8 +360,10 @@ async def play_music(guild_id: int, queue: Queue, *, finished=None, error=None) 
 
 
 async def load_playback_song(guild_id: int, link: str) -> dict:
-    return await asyncio.wait_for(
+    info = await asyncio.wait_for(
         asyncio.to_thread(extract_playback_song, guild_id, link), timeout=SONG_LOAD_TIMEOUT)
+    info['gain_db'] = await track_normalizer.gain_for(info, download=DOWNLOAD)
+    return info
 
 
 async def finish_loading(guild_id: int, queue: Queue, count: int = 1) -> None:
@@ -349,6 +388,7 @@ async def play(interaction: discord.Interaction, link: str) -> None:
         await interaction.edit_original_response(content=str(error))
         return
     queue.pending_songs += 1
+    track_queue_task(queue, prepare_voice(guild_id, queue))
     try:
         info = await track_queue_task(queue, load_playback_song(guild_id, link))
         if not queue_is_active(guild_id, queue):
@@ -463,6 +503,7 @@ async def remove(interaction: discord.Interaction, index: int) -> None:
     queue.ids.pop(index - 1)
     queue.urls.pop(index - 1)
     queue.youtube_urls.pop(index - 1)
+    queue.gains.pop(index - 1)
     await interaction.edit_original_response(
         content=f'Successfully removed "{song}" at index **{index}**!')
 
@@ -666,6 +707,7 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
             random.shuffle(songs)
         queue.pending_songs += len(songs) - reservation
         reservation = 0  # The loader now owns the entire batch's pending count.
+        track_queue_task(queue, prepare_voice(guild_id, queue))
         track_queue_task(queue, add_songs_to_queue(guild_id, queue, songs))
     except asyncio.CancelledError:
         if queue_is_active(guild_id, queue):

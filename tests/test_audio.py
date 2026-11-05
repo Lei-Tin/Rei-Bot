@@ -1,5 +1,6 @@
 """Measure real FFmpeg output rather than just checking the filter's configuration."""
 import array
+import asyncio
 import json
 import math
 import re
@@ -17,6 +18,7 @@ import discord
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'Rei'))
 import config
 from playback_audio import playback_audio_options
+from loudness import fixed_gain_db, measure_audio
 
 
 @unittest.skipUnless(shutil.which('ffmpeg'), 'Install ffmpeg to run the audio measurements')
@@ -42,8 +44,9 @@ class AudioTests(unittest.TestCase):
         return path
 
     def play(self, path, *, normalize=True, download=False):
+        measurement = asyncio.run(measure_audio(str(path), download=True)) if normalize else None
         with patch.object(config, 'NORMALIZE_AUDIO', normalize):
-            options = playback_audio_options(download=download)
+            options = playback_audio_options(download=download, gain_db=fixed_gain_db(measurement))
         # Fixtures are local WAVs. HTTP reconnect flags apply only to the live input transport.
         options.pop('before_options', None)
         source = discord.FFmpegPCMAudio(str(path), stderr=subprocess.DEVNULL, **options)
@@ -97,3 +100,22 @@ class AudioTests(unittest.TestCase):
         normalized = self.measure(self.play(path))
         self.assertGreater(float(original['input_tp']), -.8)
         self.assertLessEqual(float(normalized['input_tp']), -1.3)
+
+    def test_fixed_gain_preserves_the_difference_between_quiet_and_loud_sections(self):
+        path = self.tone('dynamics', lambda i: .04 if i < 4 * 48000 else .4, seconds=12)
+        original = self.play(path, normalize=False)
+        matched = self.play(path)
+
+        def rms_db(data):
+            samples = array.array('h', data)
+            if sys.byteorder != 'little':
+                samples.byteswap()
+            rms = math.sqrt(sum(float(x) * x for x in samples) / len(samples))
+            return 20 * math.log10(rms / 32768)
+
+        # Measure away from the section boundary, using the actual playback PCM.
+        gain = []
+        for start, end in ((1, 3), (6, 8), (9, 11)):
+            section = slice(start * 48000 * 4, end * 48000 * 4)
+            gain.append(rms_db(matched[section]) - rms_db(original[section]))
+        self.assertLess(max(gain) - min(gain), .1)

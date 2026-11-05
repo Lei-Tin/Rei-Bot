@@ -4,6 +4,8 @@
 **/__pycache__
 **/dist
 **/rei.spec
+/Rei/Guilds/audio_loudness.csv
+/Rei/Guilds/*.tmp
 
 # Local agent workspace and investigation artifacts
 /.agents/
