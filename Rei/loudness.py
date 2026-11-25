@@ -1,4 +1,4 @@
-"""Whole-track loudness measurements, fixed gain, and an atomic CSV cache."""
+"""Sampled loudness measurements, fixed gain, and an atomic CSV cache."""
 import asyncio
 import csv
 import hashlib
@@ -19,6 +19,9 @@ import config
 
 logger = logging.getLogger(__name__)
 
+SAMPLE_COUNT = 3
+SAMPLE_SECONDS = 12
+
 
 @dataclass(frozen=True)
 class LoudnessMeasurement:
@@ -31,19 +34,31 @@ class LoudnessMeasurement:
             raise ValueError('Invalid loudness measurement')
 
 
-def fixed_gain_db(measurement: LoudnessMeasurement | None) -> float:
+def fixed_gain_db(measurement: LoudnessMeasurement | None, *, allow_boost=True) -> float:
     if measurement is None:
         return 0.0
     # One gain for the entire track. Leave peak headroom instead of compressing loud sections.
-    return min(config.AUDIO_TARGET_LUFS - measurement.integrated_lufs,
+    gain = min(config.AUDIO_TARGET_LUFS - measurement.integrated_lufs,
                config.AUDIO_TRUE_PEAK_DBTP - measurement.true_peak_dbtp)
+    # Samples can miss a louder section, so only a full measurement can justify boosting.
+    return gain if allow_boost else min(gain, 0.0)
 
 
-def measurement_key(info: dict, *, download=False) -> str:
+def sample_windows(duration: float) -> tuple[tuple[float, float], ...]:
+    if duration <= SAMPLE_COUNT * SAMPLE_SECONDS:
+        return ((0.0, duration),)
+    section = duration / SAMPLE_COUNT
+    return tuple(((index + 0.5) * section - SAMPLE_SECONDS / 2, SAMPLE_SECONDS)
+                 for index in range(SAMPLE_COUNT))
+
+
+def measurement_key(info: dict, *, download=False, sampled=False) -> str:
     identity = ['stereo48k-v1', info.get('extractor_key') or info.get('extractor'),
                 info.get('id'), info.get('webpage_url'), info.get('format_id'),
                 info.get('acodec'), info.get('asr'), info.get('audio_channels'),
                 info.get('duration'), bool(download)]
+    if sampled:
+        identity.extend(('centered-samples-v1', SAMPLE_COUNT, SAMPLE_SECONDS))
     # Expiring media URLs are deliberately excluded from the identity and the CSV.
     return hashlib.sha256(json.dumps(identity, ensure_ascii=True).encode()).hexdigest()
 
@@ -106,20 +121,29 @@ class LoudnessCache:
                     temporary.unlink(missing_ok=True)
 
 
-async def measure_audio(source: str, *, download=False) -> LoudnessMeasurement | None:
-    args = ['ffmpeg', '-hide_banner', '-nostdin', '-nostats', '-threads', '1', '-filter_threads', '1']
+async def measure_audio(source: str, windows: tuple[tuple[float, float], ...], *,
+                        download=False) -> LoudnessMeasurement | None:
+    args = ['ffmpeg', '-hide_banner', '-nostdin', '-nostats', '-xerror',
+            '-filter_complex_threads', '1', '-progress', 'pipe:1']
     if shutil.which('nice'):
         args = ['nice', '-n', '10', *args]
-    if not download:
-        args.extend(shlex.split(config.FFMPEG_OPTIONS.get('before_options', '')))
-    # Measure the decoded stereo signal; loudnorm is used for analysis only, never for playback.
-    args.extend(['-i', source, '-map', '0:a:0', '-vn', '-af',
-                 'aresample=48000,aformat=channel_layouts=stereo,loudnorm=print_format=json',
-                 '-f', 'null', '-'])
+    before_input = [] if download else shlex.split(config.FFMPEG_OPTIONS.get('before_options', ''))
+    for start, length in windows:
+        args.extend([*before_input, '-threads', '1', '-ss', f'{start:.6f}', '-t', f'{length:.6f}', '-i', source])
+    # Join decoded samples before measuring so loudness gating runs over the combined audio.
+    stereo = 'aformat=sample_rates=48000:channel_layouts=stereo'
+    analyzer = 'loudnorm=print_format=json'
+    if len(windows) == 1:
+        filters = f'[0:a:0]{stereo},{analyzer}[measured]'
+    else:
+        clips = [f'[{i}:a:0]{stereo},asetpts=PTS-STARTPTS[clip{i}]' for i in range(len(windows))]
+        inputs = ''.join(f'[clip{i}]' for i in range(len(windows)))
+        filters = ';'.join([*clips, f'{inputs}concat=n={len(windows)}:v=0:a=1,{analyzer}[measured]'])
+    args.extend(['-filter_complex', filters, '-map', '[measured]', '-f', 'null', '-'])
     process = await asyncio.create_subprocess_exec(
-        *args, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
+        *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     try:
-        _, stderr = await asyncio.wait_for(process.communicate(), timeout=config.AUDIO_MEASUREMENT_TIMEOUT)
+        progress, stderr = await asyncio.wait_for(process.communicate(), timeout=config.AUDIO_MEASUREMENT_TIMEOUT)
     finally:
         if process.returncode is None:
             try:
@@ -129,6 +153,12 @@ async def measure_audio(source: str, *, download=False) -> LoudnessMeasurement |
             await process.communicate()
     if process.returncode:
         raise RuntimeError('FFmpeg could not measure this track')
+    # Some streams end early without an FFmpeg error. Avoid caching an incomplete sample.
+    timestamps = re.findall(rb'^out_time_us=(\d+)', progress, re.MULTILINE)
+    measured_seconds = int(timestamps[-1]) / 1_000_000 if timestamps else 0.0
+    expected_seconds = sum(length for _, length in windows)
+    if measured_seconds <= 0 or measured_seconds < expected_seconds - min(0.5, expected_seconds * 0.1):
+        raise ValueError('FFmpeg did not read enough audio to measure this track')
     match = re.search(r'\{\s*"input_i".*?\}', stderr.decode(errors='replace'), re.S)
     if match is None:
         raise ValueError('FFmpeg returned no loudness measurement')
@@ -155,23 +185,31 @@ class TrackNormalizer:
             logger.warning('Loudness cache is unavailable; measuring without the cache')
             return None
 
-    async def _measurement(self, info: dict, *, download=False):
-        key = measurement_key(info, download=download)
-        result = await self._lookup(key)
+    async def _measurement(self, info: dict, windows, *, download=False):
+        full_key = measurement_key(info, download=download)
+        result = await self._lookup(full_key)
         if result is not None:
             logger.info('Using cached loudness for song %s', info.get('id'))
-            return result
+            return result, True
+        sampled = len(windows) > 1
+        key = measurement_key(info, download=download, sampled=True) if sampled else full_key
+        if sampled:
+            result = await self._lookup(key)
+            if result is not None:
+                logger.info('Using cached loudness samples for song %s', info.get('id'))
+                return result, False
         async with self._measurement_lock:
             result = await self._lookup(key)
             if result is None:
-                logger.info('Measuring whole-track loudness for song %s', info.get('id'))
-                result = await measure_audio(info['url'], download=download)
+                logger.info('Measuring loudness for song %s (%d excerpt%s)', info.get('id'),
+                            len(windows), 's' if sampled else '')
+                result = await measure_audio(info['url'], windows, download=download)
                 if result is not None:
                     try:
                         await asyncio.to_thread(self.cache.put, key, info, result)
                     except OSError:
                         logger.warning('Could not persist the loudness measurement')
-            return result
+            return result, not sampled
 
     async def gain_for(self, info: dict, *, download=False) -> float:
         duration = info.get('duration')
@@ -179,10 +217,11 @@ class TrackNormalizer:
                 or not isinstance(duration, (int, float)) or not math.isfinite(duration) or duration <= 0):
             return 0.0
         try:
-            result = await asyncio.wait_for(
-                self._measurement(info, download=download), timeout=config.AUDIO_MEASUREMENT_TIMEOUT)
+            result, allow_boost = await asyncio.wait_for(
+                self._measurement(info, sample_windows(duration), download=download),
+                timeout=config.AUDIO_MEASUREMENT_TIMEOUT)
         except Exception as error:
             # Do not log signed media URLs from FFmpeg errors, or fall back to dynamic gain.
             logger.warning('Loudness measurement unavailable (%s); keeping original gain', type(error).__name__)
             return 0.0
-        return fixed_gain_db(result)
+        return fixed_gain_db(result, allow_boost=allow_boost)

@@ -15,7 +15,7 @@ PRELOAD_SONGS = 2
 # Match perceived volume between songs with one fixed gain per track.
 AUDIO_TARGET_LUFS = -16
 AUDIO_TRUE_PEAK_DBTP = -1.5
-AUDIO_MEASUREMENT_TIMEOUT = 90
+AUDIO_MEASUREMENT_TIMEOUT = 12
 
 FFMPEG_OPTIONS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 10',

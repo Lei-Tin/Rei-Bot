@@ -11,7 +11,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'Rei'))
 import config
-from loudness import LoudnessCache, LoudnessMeasurement, TrackNormalizer, fixed_gain_db, measure_audio, measurement_key
+from loudness import (
+    LoudnessCache, LoudnessMeasurement, TrackNormalizer, fixed_gain_db, measure_audio, measurement_key, sample_windows,
+)
 
 
 def track(**changes):
@@ -45,6 +47,7 @@ class LoudnessCacheTests(unittest.TestCase):
         for info in (track(id='different'), track(format_id='140'), track(duration=181), track(acodec='aac')):
             self.assertNotEqual(self.key, measurement_key(info))
         self.assertNotEqual(self.key, measurement_key(self.info, download=True))
+        self.assertNotEqual(self.key, measurement_key(self.info, sampled=True))
 
     def test_corrupt_rows_do_not_discard_other_valid_measurements(self):
         self.cache.put(self.key, self.info, self.measurement)
@@ -99,15 +102,29 @@ class TrackNormalizerTests(unittest.IsolatedAsyncioTestCase):
         self.cache = LoudnessCache(Path(self.folder.name) / 'audio_loudness.csv')
         self.normalizer = TrackNormalizer(self.cache)
         self.info = track()
-        self.measurement = LoudnessMeasurement(-20, -8)
+        self.measurement = LoudnessMeasurement(-12, -4)
 
     async def test_cache_hit_after_restart_skips_ffmpeg_and_reuses_raw_measurements(self):
         with patch('loudness.measure_audio', AsyncMock(return_value=self.measurement)) as measure:
-            self.assertEqual(await self.normalizer.gain_for(self.info), 4)
+            self.assertEqual(await self.normalizer.gain_for(self.info), -4)
             fresh = TrackNormalizer(LoudnessCache(self.cache.path))
             with patch.object(config, 'AUDIO_TARGET_LUFS', -18):
-                self.assertEqual(await fresh.gain_for(track(url='https://new.example/expired')), 2)
+                self.assertEqual(await fresh.gain_for(track(url='https://new.example/expired')), -6)
         measure.assert_awaited_once()
+
+    async def test_existing_full_measurements_still_allow_safe_boosts(self):
+        original = LoudnessMeasurement(-20, -8)
+        self.cache.put(measurement_key(self.info), self.info, original)
+        with patch('loudness.measure_audio', AsyncMock()) as measure:
+            self.assertEqual(await self.normalizer.gain_for(self.info), 4)
+        measure.assert_not_called()
+
+    async def test_partial_measurements_do_not_boost_quiet_tracks_even_after_cache_hit(self):
+        with patch('loudness.measure_audio', AsyncMock(return_value=LoudnessMeasurement(-20, -8))) as measure:
+            for _ in range(2):
+                self.assertEqual(await self.normalizer.gain_for(self.info), 0)
+        measure.assert_awaited_once()
+        self.assertIsNone(self.cache.get(measurement_key(self.info)))
 
     async def test_concurrent_cache_misses_measure_only_once(self):
         async def measured(*args, **kwargs):
@@ -115,7 +132,7 @@ class TrackNormalizerTests(unittest.IsolatedAsyncioTestCase):
             return self.measurement
         with patch('loudness.measure_audio', AsyncMock(side_effect=measured)) as measure:
             results = await asyncio.gather(*(self.normalizer.gain_for(self.info) for _ in range(6)))
-        self.assertEqual(results, [4] * 6)
+        self.assertEqual(results, [-4] * 6)
         measure.assert_awaited_once()
 
     async def test_failed_measurement_uses_original_gain_and_is_not_cached(self):
@@ -125,18 +142,18 @@ class TrackNormalizerTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('signed URL secret', '\n'.join(logs.output))
         self.assertFalse(self.cache.path.exists())
         with patch('loudness.measure_audio', AsyncMock(return_value=self.measurement)):
-            self.assertEqual(await self.normalizer.gain_for(self.info), 4)
+            self.assertEqual(await self.normalizer.gain_for(self.info), -4)
 
     async def test_cache_write_failure_still_uses_the_measured_gain(self):
         with patch('loudness.measure_audio', AsyncMock(return_value=self.measurement)), \
                 patch.object(self.cache, 'put', side_effect=OSError()), self.assertLogs('loudness', level='WARNING'):
-            self.assertEqual(await self.normalizer.gain_for(self.info), 4)
+            self.assertEqual(await self.normalizer.gain_for(self.info), -4)
 
     async def test_unavailable_cache_does_not_block_measurement_or_playback(self):
         with patch('loudness.measure_audio', AsyncMock(return_value=self.measurement)), \
                 patch.object(self.cache, 'get', side_effect=OSError()), \
                 patch.object(self.cache, 'put', side_effect=OSError()), self.assertLogs('loudness', level='WARNING'):
-            self.assertEqual(await self.normalizer.gain_for(self.info), 4)
+            self.assertEqual(await self.normalizer.gain_for(self.info), -4)
 
     async def test_live_and_unknown_duration_do_not_scan(self):
         with patch('loudness.measure_audio', AsyncMock()) as measure:
@@ -158,7 +175,7 @@ class TrackNormalizerTests(unittest.IsolatedAsyncioTestCase):
                 await task
         self.assertFalse(self.cache.path.exists())
         with patch('loudness.measure_audio', AsyncMock(return_value=self.measurement)):
-            self.assertEqual(await self.normalizer.gain_for(self.info), 4)
+            self.assertEqual(await self.normalizer.gain_for(self.info), -4)
 
     async def test_timeout_uses_original_gain_without_caching(self):
         async def measured(*args, **kwargs):
@@ -183,7 +200,7 @@ class TrackNormalizerTests(unittest.IsolatedAsyncioTestCase):
         process.communicate = AsyncMock(side_effect=communicate)
         process.kill = MagicMock()
         with patch('loudness.asyncio.create_subprocess_exec', AsyncMock(return_value=process)):
-            task = asyncio.create_task(measure_audio('https://example.com/audio'))
+            task = asyncio.create_task(measure_audio('https://example.com/audio', sample_windows(180)))
             await started.wait()
             task.cancel()
             with self.assertRaises(asyncio.CancelledError):

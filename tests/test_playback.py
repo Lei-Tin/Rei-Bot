@@ -557,7 +557,7 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(10, self.bot.q)
         self.assertFalse(queue.tasks)
 
-    async def test_playlist_joins_voice_while_first_song_is_still_preparing(self):
+    async def test_playlist_waits_for_first_song_before_joining_voice(self):
         songs = (PlaylistSong('First', 'first', 'https://example.com/first'),)
         started, release = asyncio.Event(), asyncio.Event()
 
@@ -571,8 +571,7 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
             await self.bot.pl_enqueue.callback(self.event, 'test', False)
             queue = self.bot.q[10]
             await asyncio.wait_for(started.wait(), 1)
-            await self.until(lambda: queue.voice_client is self.voice)
-            self.channel.connect.assert_awaited_once()
+            self.channel.connect.assert_not_called()
             self.assertEqual(self.voice.played, [])
             self.assertEqual(queue.pending_songs, 1)
             release.set()
@@ -581,9 +580,9 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('cls', self.channel.connect.call_args.kwargs)
         self.assertEqual(self.voice.played, ['stream:First'])
 
-    async def test_play_connects_and_prepares_concurrently_using_native_audio_source(self):
-        connecting, extracting = asyncio.Event(), asyncio.Event()
-        allow_connection, allow_media = asyncio.Event(), asyncio.Event()
+    async def test_play_finishes_loudness_measurement_before_joining_voice(self):
+        connecting, measuring = asyncio.Event(), asyncio.Event()
+        allow_connection, allow_measurement = asyncio.Event(), asyncio.Event()
         source = SimpleNamespace(url='stream:First', read=MagicMock(), cleanup=MagicMock())
 
         async def connect(**kwargs):
@@ -591,70 +590,47 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
             await allow_connection.wait()
             return self.voice
 
-        async def load(*args):
-            extracting.set()
-            await allow_media.wait()
-            return media_info('First')
+        async def gain(*args, **kwargs):
+            measuring.set()
+            await allow_measurement.wait()
+            return -3.0
 
         self.channel.connect.side_effect = connect
-        with patch.object(self.bot, 'load_playback_song', side_effect=load), \
-                patch.object(self.bot.discord, 'FFmpegPCMAudio', return_value=source):
+        with patch.object(self.bot, 'extract_playback_song', return_value=media_info('First')), \
+                patch.object(self.bot.track_normalizer, 'gain_for', side_effect=gain), \
+                patch.object(self.bot.discord, 'FFmpegPCMAudio', return_value=source) as ffmpeg:
             command = asyncio.create_task(self.bot.play.callback(self.event, 'https://example.com/first'))
-            await asyncio.wait_for(asyncio.gather(connecting.wait(), extracting.wait()), 1)
-            allow_media.set()
-            await self.until(lambda: bool(self.bot.q[10].songs))
+            await asyncio.wait_for(measuring.wait(), 1)
+            self.channel.connect.assert_not_called()
+            allow_measurement.set()
+            await asyncio.wait_for(connecting.wait(), 1)
             self.assertEqual(self.voice.played, [])
             allow_connection.set()
             await asyncio.wait_for(command, 1)
+            self.assertIn('volume=-3.000000dB', ffmpeg.call_args.kwargs['options'])
         self.channel.connect.assert_awaited_once()
         self.assertNotIn('cls', self.channel.connect.call_args.kwargs)
         self.assertIs(self.voice.sources[0], source)
         source.read.assert_not_called()
 
-    async def test_failed_media_cancels_an_unfinished_voice_connection(self):
-        connecting, cancelled = asyncio.Event(), asyncio.Event()
-
-        async def connect(**kwargs):
-            connecting.set()
-            try:
-                await asyncio.Future()
-            finally:
-                cancelled.set()
-
-        async def load(*args):
-            await connecting.wait()
-            raise PlaylistError('This song is unavailable.')
-
-        self.channel.connect.side_effect = connect
-        with patch.object(self.bot, 'load_playback_song', side_effect=load):
+    async def test_failed_media_does_not_join_voice(self):
+        with patch.object(self.bot, 'load_playback_song',
+                          side_effect=PlaylistError('This song is unavailable.')):
             await asyncio.wait_for(self.bot.play.callback(self.event, 'https://example.com/bad'), 1)
-        self.assertTrue(cancelled.is_set())
+        self.channel.connect.assert_not_called()
         self.assertNotIn(10, self.bot.q)
         self.assertEqual(self.voice.played, [])
         self.assertIn('unavailable', self.event.edit_original_response.call_args.kwargs['content'])
 
-    async def test_unavailable_playlist_cancels_an_unfinished_voice_connection(self):
-        connecting, cancelled = asyncio.Event(), asyncio.Event()
+    async def test_unavailable_playlist_does_not_join_voice(self):
         songs = (PlaylistSong('Bad', 'bad', 'https://example.com/bad'),)
 
-        async def connect(**kwargs):
-            connecting.set()
-            try:
-                await asyncio.Future()
-            finally:
-                cancelled.set()
-
-        async def load(*args):
-            await connecting.wait()
-            raise PlaylistError('Unavailable')
-
-        self.channel.connect.side_effect = connect
         with patch.object(self.bot.playlist_store, 'read', return_value=SimpleNamespace(songs=songs)), \
-                patch.object(self.bot, 'load_playback_song', side_effect=load):
+                patch.object(self.bot, 'load_playback_song', side_effect=PlaylistError('Unavailable')):
             await self.bot.pl_enqueue.callback(self.event, 'test', False)
             queue = self.bot.q[10]
             await self.until(lambda: not queue.tasks)
-        self.assertTrue(cancelled.is_set())
+        self.channel.connect.assert_not_called()
         self.assertNotIn(10, self.bot.q)
         self.assertEqual(queue.pending_songs, 0)
 
@@ -707,6 +683,26 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
         self.voice.disconnect.assert_awaited_once_with(force=True)
         self.assertNotIn(10, self.bot.q)
         self.assertFalse(queue.tasks)
+
+    async def test_removing_an_upcoming_song_during_connection_preserves_first_song(self):
+        queue = self.queue('A', 'B')
+        queue.voice_client = None
+        connecting, allow_connection = asyncio.Event(), asyncio.Event()
+
+        async def connect(**kwargs):
+            connecting.set()
+            await allow_connection.wait()
+            return self.voice
+
+        self.channel.connect.side_effect = connect
+        task = self.bot.track_queue_task(queue, self.bot.play_music(10, queue))
+        await asyncio.wait_for(connecting.wait(), 1)
+        await self.bot.remove.callback(self.event, 1)
+        allow_connection.set()
+        await asyncio.wait_for(task, 1)
+        self.assertEqual(self.voice.played, ['stream:A'])
+        self.assertEqual(queue.current, 'A')
+        self.assertEqual(queue.songs, [])
 
     async def test_each_song_keeps_its_own_fixed_gain_when_playback_advances(self):
         queue = self.queue('A', 'B')

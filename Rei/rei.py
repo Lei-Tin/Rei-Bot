@@ -2,7 +2,7 @@
 The main file for the bot
 """
 # Change the version string every update
-version = 'v1.5.7 (Nov 4, 2026)'
+version = 'v1.5.8 (Nov 24, 2026)'
 
 import asyncio
 from contextlib import asynccontextmanager
@@ -287,7 +287,7 @@ async def stop_if_no_listeners(guild_id: int, queue: Queue) -> bool:
 
 
 async def connect_voice_locked(guild_id: int, queue: Queue) -> bool:
-    """Connect once under queue.lock while song preparation runs independently."""
+    """Connect once under queue.lock after a song is ready."""
     if not queue_is_active(guild_id, queue) or await stop_if_no_listeners(guild_id, queue):
         return False
     if queue.voice_client is None:
@@ -300,30 +300,8 @@ async def connect_voice_locked(guild_id: int, queue: Queue) -> bool:
     return True
 
 
-async def prepare_voice(guild_id: int, queue: Queue) -> None:
-    async with queue.lock:
-        if not queue_is_active(guild_id, queue):
-            return
-        try:
-            await connect_voice_locked(guild_id, queue)
-        except Exception:
-            logger.exception('Could not connect to voice in guild %s', guild_id)
-            await close_queue_locked(guild_id, queue)
-            await send_playback_message(queue, 'Failed to connect to the voice channel. Please try again.')
-
-
 async def play_music(guild_id: int, queue: Queue, *, finished=None, error=None) -> None:
     """The only playback transition. Queue state is changed exclusively on the event loop."""
-    if finished is None and queue_is_active(guild_id, queue):
-        if queue.playing or (not queue.songs and queue.pending_songs):
-            return
-        if not queue.songs:
-            # Retire failed loads without waiting for an unfinished voice handshake.
-            was_connected = queue.voice_client is not None
-            await close_queue(guild_id, queue)
-            if was_connected:
-                await send_playback_message(queue, 'Queue is now empty!')
-            return
     async with queue.lock:
         if not queue_is_active(guild_id, queue):
             return
@@ -346,12 +324,21 @@ async def play_music(guild_id: int, queue: Queue, *, finished=None, error=None) 
             if was_connected:
                 await send_playback_message(queue, 'Queue is now empty!')
             return
-        source = None
+        # Reserve the playback slot before the handshake so /remove only edits upcoming songs.
+        source_url, gain_db = queue.urls[0], queue.gains[0]
+        song, original_link = take_next_song(queue)
         try:
             if not await connect_voice_locked(guild_id, queue):
                 return
             voice_client = queue.voice_client
+        except Exception:
+            logger.exception('Could not connect to voice in guild %s', guild_id)
+            await close_queue_locked(guild_id, queue)
+            await send_playback_message(queue, 'Failed to connect to the voice channel. Please try again.')
+            return
 
+        source = None
+        try:
             loop = asyncio.get_running_loop()
             token = object()
 
@@ -366,10 +353,9 @@ async def play_music(guild_id: int, queue: Queue, *, finished=None, error=None) 
                 except RuntimeError:
                     pass  # The process's event loop has already shut down.
 
-            source = discord.FFmpegPCMAudio(queue.urls[0], **playback_audio_options(
-                download=DOWNLOAD, gain_db=queue.gains[0]))
+            source = discord.FFmpegPCMAudio(source_url, **playback_audio_options(
+                download=DOWNLOAD, gain_db=gain_db))
             voice_client.play(source, after=after)
-            song, original_link = take_next_song(queue)
             queue.current = song
             queue.playing = True
             queue.playback_token = token
@@ -412,7 +398,6 @@ async def play(interaction: discord.Interaction, link: str) -> None:
         await interaction.edit_original_response(content=str(error))
         return
     queue.pending_songs += 1
-    track_queue_task(queue, prepare_voice(guild_id, queue))
     try:
         info = await track_queue_task(queue, load_playback_song(guild_id, link))
         if not queue_is_active(guild_id, queue):
@@ -732,7 +717,6 @@ async def pl_enqueue(interaction: discord.Interaction, name: str, shuffle: bool)
             random.shuffle(songs)
         queue.pending_songs += len(songs) - reservation
         reservation = 0  # The loader now owns the entire batch's pending count.
-        track_queue_task(queue, prepare_voice(guild_id, queue))
         track_queue_task(queue, add_songs_to_queue(guild_id, queue, songs))
     except asyncio.CancelledError:
         if queue_is_active(guild_id, queue):

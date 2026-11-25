@@ -3,6 +3,7 @@ import array
 import asyncio
 import json
 import math
+import os
 import re
 import shutil
 import subprocess
@@ -17,7 +18,7 @@ import discord
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'Rei'))
 import config
 from playback_audio import playback_audio_options
-from loudness import fixed_gain_db, measure_audio
+from loudness import fixed_gain_db, measure_audio, sample_windows
 
 
 @unittest.skipUnless(shutil.which('ffmpeg'), 'Install ffmpeg to run the audio measurements')
@@ -43,21 +44,25 @@ class AudioTests(unittest.TestCase):
         return path
 
     def play(self, path, *, normalize=True, download=False):
-        measurement = asyncio.run(measure_audio(str(path), download=True)) if normalize else None
+        with wave.open(str(path), 'rb') as audio:
+            duration = audio.getnframes() / audio.getframerate()
+        windows = sample_windows(duration)
+        measurement = asyncio.run(measure_audio(str(path), windows, download=True)) if normalize else None
         options = playback_audio_options(download=download, gain_db=fixed_gain_db(measurement))
         # Fixtures are local WAVs. HTTP reconnect flags apply only to the live input transport.
         options.pop('before_options', None)
-        source = discord.FFmpegPCMAudio(str(path), stderr=subprocess.DEVNULL, **options)
-        try:
-            frames = []
-            while data := source.read():
-                frames.append(data)
-            result = b''.join(frames)
-            self.assertEqual(source._process.wait(timeout=10), 0)
-            return result
-        finally:
-            source._stdout.close()
-            source.cleanup()
+        with open(os.devnull, 'wb') as stderr:
+            source = discord.FFmpegPCMAudio(str(path), stderr=stderr, **options)
+            try:
+                frames = []
+                while data := source.read():
+                    frames.append(data)
+                result = b''.join(frames)
+                self.assertEqual(source._process.wait(timeout=10), 0)
+                return result
+            finally:
+                source._stdout.close()
+                source.cleanup()
 
     def measure(self, pcm):
         result = subprocess.run(['ffmpeg', '-hide_banner', '-nostdin', '-f', 's16le', '-ar', '48000',
@@ -112,6 +117,20 @@ class AudioTests(unittest.TestCase):
         normalized = self.measure(self.play(path))
         self.assertGreater(float(original['input_tp']), -.8)
         self.assertLessEqual(float(normalized['input_tp']), -1.3)
+
+    def test_sampling_measures_later_sections_and_leaves_out_audio_between_windows(self):
+        def amplitude(i):
+            seconds = i / 48000
+            if 15 <= seconds < 17:
+                return .98
+            if 18 <= seconds < 30 or 34 <= seconds < 46:
+                return .4
+            return .04
+
+        path = self.tone('sampled', amplitude, seconds=48)
+        stats = asyncio.run(measure_audio(str(path), sample_windows(48), download=True))
+        self.assertGreater(stats.integrated_lufs, config.AUDIO_TARGET_LUFS)
+        self.assertAlmostEqual(stats.true_peak_dbtp, -8, delta=.5)
 
     def test_fixed_gain_preserves_the_difference_between_quiet_and_loud_sections(self):
         path = self.tone('dynamics', lambda i: .04 if i < 4 * 48000 else .4, seconds=12)

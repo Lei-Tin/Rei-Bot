@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.8] - 2026-11-24
+
+- Wait for the first song to finish preparing before joining voice with `/play` or `/playlist-enqueue`.
+- Measure loudness from short excerpts and wait up to 12 seconds for analysis. Reuse cached measurements and apply one fixed gain throughout playback.
+
 ## [1.5.7] - 2026-11-04
 
 ### Changed
